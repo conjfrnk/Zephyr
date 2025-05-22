@@ -9,12 +9,12 @@ body,html{margin:0;height:100%; font-family: sans-serif;}
 #map{position:absolute;top:0;left:300px;right:0;bottom:0}
 #sidebar{position:absolute;top:0;left:0;width:300px;height:100%;
         padding:10px;background:#f4f4f4;box-sizing:border-box;font:14px/1.4 sans-serif; overflow-y: auto;}
-.progress{width:80px;height:80px;margin:10px auto} 
-.progress svg{width:80px;height:80px}
-.progress circle.bg{fill:none;stroke:#e5e7eb;stroke-width:6} 
-.progress circle.fg{fill:none;stroke:#3b82f6;stroke-width:6;stroke-linecap:round;
-                    transform:rotate(-90deg);transform-origin:center}
-.progress text{font-size:18px;text-anchor:middle;dominant-baseline:central; fill: #333;}
+
+.progress-bar-container{display: flex; align-items: center; margin: 10px auto; width: 90%;}
+#progress-bar-text{margin-right: 10px; font-size: 16px; width: 55px; text-align: right; color: #333;}
+.progress-bar-outer{flex-grow: 1; background-color: #e5e7eb; border-radius: 5px; height: 22px; padding: 2px; border: 1px solid #ccc;}
+#progress-bar-inner{width: 0%; background-color: #3b82f6; height: 100%; border-radius: 3px; transition: width 0.3s ease-in-out; text-align: center; color: white; font-size:12px; line-height:18px;}
+
 #weather{position:absolute;top:10px;right:10px;z-index:800;
         background:rgba(255,255,255,0.9);border:1px solid #ccc;padding:5px 8px;font:12px/1.2 sans-serif; border-radius: 4px;}
 .zipLine{font-size:12px; margin: 3px 0; padding: 2px; background-color: #fff; border: 1px solid #ddd; border-radius: 3px;}
@@ -32,12 +32,33 @@ h3,h4{margin-top:15px; margin-bottom:5px; color:#333;}
 .start-finish-pin-finish { background-color: lightcoral; }
 #plannedRunInfo { margin-top:10px; margin-bottom: 5px; padding:8px; background-color:#e9e9f2; border: 1px solid #d0d0e0; border-radius:4px; font-size:13px; line-height:1.5;}
 #plannedRunInfo strong {color: #333;}
+
+/* GitHub Button Style */
+.leaflet-control-github {
+    background-color: white;
+    padding: 5px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+    font-size: 12px;
+    cursor: pointer;
+}
+.leaflet-control-github a {
+    text-decoration: none;
+    color: #333;
+    display: flex;
+    align-items: center;
+}
+.leaflet-control-github svg {
+    margin-right: 5px;
+    fill: #333;
+}
 </style>
 </head>
 <body>
 <div id="sidebar">
   <h3>Zephyr Route Planner</h3>
-  <label for="zips">Zip Codes:</label>
+  <label for="zips">Zip codes (e.g., 15243 15228):</label>
   <input id="zips" type="text" style="width:calc(100% - 10px);" placeholder="Enter zip codes">
   <button id="load">Load Roads</button>
 
@@ -54,14 +75,13 @@ h3,h4{margin-top:15px; margin-bottom:5px; color:#333;}
   <hr>
   
   <h3 style="text-align:center;">Overall Activity Progress</h3>
-  <div class="progress">
-    <svg viewBox="0 0 36 36">
-      <circle class="bg" cx="18" cy="18" r="16"/>
-      <circle id="ring" class="fg" cx="18" cy="18" r="16"
-              stroke-dasharray="0 100" stroke-dashoffset="100"/> 
-      <text id="pct" x="18" y="18">0%</text>
-    </svg>
+  <div class="progress-bar-container">
+    <span id="progress-bar-text">0%</span>
+    <div class="progress-bar-outer">
+      <div id="progress-bar-inner"></div>
+    </div>
   </div>
+
   <div id="userZipProgressDisplay" style="text-align:center; margin-top:5px;"></div>
   <hr>
 
@@ -84,6 +104,28 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© OpenStreetMap contributors'
 }).addTo(map);
 
+// GitHub Button Control
+const GitHubControl = L.Control.extend({
+    options: {
+        position: 'bottomleft' 
+    },
+    onAdd: function (map) {
+        const container = L.DomUtil.create('div', 'leaflet-control-github leaflet-bar');
+        container.innerHTML = `
+            <a href="https://github.com/conjfrnk/Zephyr" target="_blank" rel="noopener noreferrer">
+                <svg height="16" aria-hidden="true" viewBox="0 0 16 16" version="1.1" width="16">
+                    <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.19.01-.82.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21-.15.46-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"></path>
+                </svg>
+                View on GitHub
+            </a>
+        `;
+        L.DomEvent.disableClickPropagation(container); // Prevent map clicks when clicking the control
+        return container;
+    }
+});
+map.addControl(new GitHubControl());
+
+
 const graphLayer = L.geoJSON(null, {
   style: f => ({
     color: f.properties.done ? 'green' : '#888', 
@@ -96,7 +138,6 @@ const plannedLayer = L.geoJSON(null, {
   style: { color: 'red', weight: 6, opacity: 0.9 }
 }).addTo(map);
 
-const ring = document.getElementById('ring'), pctText = document.getElementById('pct');
 const zipsInput = document.getElementById('zips');
 const tminInput = document.getElementById('tmin'), tmaxInput = document.getElementById('tmax');
 const wmaxInput = document.getElementById('wmax'), targetInput = document.getElementById('target');
@@ -110,19 +151,24 @@ const loadProgressDiv = document.getElementById('loadProgressDisplay');
 const userZipProgressDiv = document.getElementById('userZipProgressDisplay');
 const weatherDiv = document.getElementById('weather');
 const plannedRunInfoDiv = document.getElementById('plannedRunInfo'); 
+const progressBarTextEl = document.getElementById('progress-bar-text');
+const progressBarInnerEl = document.getElementById('progress-bar-inner');
 
 
 let currentPrefs = {};
 let currentRunId = null;
+let currentRunGeoJSON = null; 
 let currentStartMarker = null;
 let startFinishMarkersLayer = L.layerGroup().addTo(map);
 let isGraphDataReady = false;
+let iterationTimeout = null; 
 
-function updateProgressWheel(percentage) {
+function updateProgressBar(percentage) {
   const p = parseInt(percentage) || 0;
-  const offset = 100 - p;
-  ring.setAttribute('stroke-dashoffset', offset);
-  pctText.textContent = p + '%';
+  if (progressBarTextEl) progressBarTextEl.textContent = p + '%';
+  if (progressBarInnerEl) {
+      progressBarInnerEl.style.width = p + '%';
+  }
 }
 
 function updateZipLoadProgress(zipsStatusData, graphReadyStatus) {
@@ -203,12 +249,15 @@ function initializeApp() {
     targetInput.value = prefsData.target; 
 
     isGraphDataReady = statusData.ready;
-    updateProgressWheel(statusData.done);
+    updateProgressBar(statusData.done); 
     updateZipLoadProgress(statusData.zips, statusData.ready);
     updateUserRunProgressByZip(statusData.zips);
     
     if (statusData.ready) {
-      fetchGraphData().then(refreshWeather); 
+      fetchGraphData().then(() => { 
+          if (graphLayer.getLayers().length > 0) map.fitBounds(graphLayer.getBounds(), {padding: [20,20]}); // Zoom to graph
+          refreshWeather();
+      }); 
     } else if (prefsData.zip_codes && prefsData.zip_codes.trim() !== '') { 
       msgDiv.textContent = "Graph data loading for saved zip codes...";
       pollStatus(); 
@@ -223,18 +272,15 @@ function initializeApp() {
 }
 
 function fetchGraphData() {
-  msgDiv.textContent = "Fetching map data...";
-  return fetch('/graph') // Ensure this return is present
+  return fetch('/graph') 
     .then(r => {
       if (!r.ok) { 
-        msgDiv.textContent = `Error fetching map: ${r.status}. Retrying...`;
-        setTimeout(pollStatus, 3000); 
+        if(isGraphDataReady) setTimeout(pollStatus, 3000); 
         return Promise.reject(`Graph fetch error: ${r.status} ${r.statusText}`);
       }
       return r.json();
     })
     .then(graphGeoJSON => {
-      // MODIFIED: Add console log to inspect done properties
       console.log("Fetched graph data for layer update. Number of features:", graphGeoJSON.features ? graphGeoJSON.features.length : 0);
       let doneCountInGeoJSON = 0;
       if (graphGeoJSON && graphGeoJSON.features) {
@@ -244,17 +290,13 @@ function fetchGraphData() {
       }
       console.log("Number of 'done:true' features in fetched GeoJSON:", doneCountInGeoJSON);
       
-      graphLayer.clearLayers().addData(graphGeoJSON); // This is the correct way to update
-      if (graphGeoJSON && graphGeoJSON.features && graphGeoJSON.features.length > 0) {
-         map.fitBounds(graphLayer.getBounds(), {padding: [20,20]});
-      }
-      // msgDiv.textContent = "Map data loaded."; // Better to let pollStatus or initializeApp handle this
-      return graphGeoJSON; // Return data for chaining
+      graphLayer.clearLayers().addData(graphGeoJSON);
+      return graphGeoJSON; 
     })
     .catch(err => {
         console.error("Error in fetchGraphData:", err);
         msgDiv.textContent = "Failed to load map data. Check console.";
-        return Promise.reject(err); // Propagate rejection
+        return Promise.reject(err); 
     });
 }
 
@@ -263,7 +305,7 @@ function pollStatus() {
     .then(r => r.ok ? r.json() : Promise.reject(`Status fetch failed: ${r.statusText}`))
     .then(statusData => {
       isGraphDataReady = statusData.ready;
-      updateProgressWheel(statusData.done);
+      updateProgressBar(statusData.done); 
       updateZipLoadProgress(statusData.zips, statusData.ready);
       updateUserRunProgressByZip(statusData.zips);
 
@@ -271,13 +313,20 @@ function pollStatus() {
         if (!msgDiv.textContent.includes("loading")) msgDiv.textContent = "Map data is loading... Updates are live.";
         setTimeout(pollStatus, 2000); 
       } else {
-        msgDiv.textContent = "Map data loaded. Ready to plan routes.";
-        fetchGraphData().then(refreshWeather); 
+        if (!msgDiv.textContent.includes("Route generation complete") && !msgDiv.textContent.includes("Planning route")) {
+             msgDiv.textContent = "Map data loaded. Ready to plan routes.";
+        }
+        fetchGraphData().then(() => { 
+            if (graphLayer.getLayers().length > 0 && !map.getBounds().contains(graphLayer.getBounds())) {
+                 map.fitBounds(graphLayer.getBounds(), {padding: [20,20]}); 
+            }
+            refreshWeather();
+        }); 
       }
     })
     .catch(err => {
         console.error("Error polling status:", err);
-        msgDiv.textContent = "Error updating status. Will retry.";
+        if (!msgDiv.textContent.includes("Error")) msgDiv.textContent = "Error updating status. Will retry.";
         setTimeout(pollStatus, 5000); 
     });
 }
@@ -293,6 +342,7 @@ loadBtn.onclick = () => {
   plannedLayer.clearLayers();
   plannedRunInfoDiv.innerHTML = ''; 
   currentRunId = null;
+  currentRunGeoJSON = null;
   completeBtnEl.disabled = true;
   isGraphDataReady = false; 
 
@@ -304,7 +354,7 @@ loadBtn.onclick = () => {
   .then(r => r.ok ? r.json() : Promise.reject(`Set zips failed: ${r.statusText}`))
   .then(response => {
       if(response.started){
-        msgDiv.textContent = `Started loading for ${response.zips_being_loaded.join(', ')}.`;
+        msgDiv.textContent = `Started loading for ${response.zips_being_loaded.join(', ')}. Polling for progress...`;
         pollStatus(); 
       } else {
         msgDiv.textContent = response.error || "Failed to start loading zip codes.";
@@ -312,7 +362,7 @@ loadBtn.onclick = () => {
   })
   .catch(err => {
     console.error("Error setting zip codes:", err);
-    msgDiv.textContent = `Error: ${err}`;
+    msgDiv.textContent = `Error: ${err.message || err}`;
   });
 };
 
@@ -326,6 +376,7 @@ startBtn.onclick = () => {
   plannedRunInfoDiv.innerHTML = ''; 
   startFinishMarkersLayer.clearLayers();
   if (currentStartMarker) { currentStartMarker.remove(); currentStartMarker = null; }
+  if (iterationTimeout) clearTimeout(iterationTimeout); 
 
   fetch('/run_start_finish_points')
     .then(r => r.ok ? r.json() : Promise.reject('Failed to fetch run start/finish points'))
@@ -333,7 +384,7 @@ startBtn.onclick = () => {
       if (points && points.length > 0) {
         points.forEach(p => {
           const iconHtml = `<div style="background-color:${p.type === 'start' ? 'lightgreen' : 'lightcoral'}; padding: 5px; border-radius: 50%; border: 1px solid #333; text-align: center; line-height: 5px; font-size:10px; width:15px; height:15px;">${p.type === 'start' ? 'S' : 'F'}</div>`;
-          const customIcon = L.divIcon({ className: `start-finish-pin-${p.type}`, html: iconHtml, iconSize: [15,15], iconAnchor:[7.5, 7.5] }); // Adjusted anchor
+          const customIcon = L.divIcon({ className: `start-finish-pin-${p.type}`, html: iconHtml, iconSize: [15,15], iconAnchor:[7.5, 7.5] });
           const marker = L.marker([p.lat, p.lng], { icon: customIcon, title: `${p.type} of run ${p.run_id} (${p.status})` })
             .addTo(startFinishMarkersLayer);
           marker.on('click', (e) => {
@@ -365,9 +416,11 @@ startBtn.onclick = () => {
 function proceedToPlanRoute(lat, lon) {
   if (currentStartMarker) { currentStartMarker.remove(); }
   currentStartMarker = L.marker([lat, lon]).addTo(map);
-  msgDiv.textContent = 'Planning route...';
+  msgDiv.textContent = 'Planning route... this may take a moment.';
   plannedRunInfoDiv.innerHTML = '<i>Planning...</i>'; 
   completeBtnEl.disabled = true;
+  currentRunGeoJSON = null;
+  if (iterationTimeout) clearTimeout(iterationTimeout);
 
   const avoidHills = avoidHillsCheck.checked;
   fetch(`/plan_auto?lat=${lat}&lon=${lon}&avoid_hills=${avoidHills}`)
@@ -375,40 +428,80 @@ function proceedToPlanRoute(lat, lon) {
       if (!r.ok) return r.text().then(text => Promise.reject(`Route planning server error: ${r.status} ${text}`));
       return r.json();
     })
-    .then(gj => {
-      if (!gj || Object.keys(gj).length === 0 || !gj.geometry) { 
-          msgDiv.textContent = 'Could not find a suitable route. Try a different start or options.';
-          plannedRunInfoDiv.innerHTML = 'No route found.';
+    .then(response => { 
+      if (!response || !response.paths || response.paths.length === 0) { 
+          msgDiv.textContent = 'Could not find any suitable routes. Try different parameters or start point.';
+          plannedRunInfoDiv.innerHTML = 'No routes found.';
           if(currentStartMarker) {currentStartMarker.remove(); currentStartMarker=null;}
           plannedLayer.clearLayers();
-          return Promise.reject("No suitable route found by backend."); 
+          return Promise.reject("No paths returned by backend."); 
       }
-      plannedLayer.clearLayers().addData(gj);
-      if (gj.geometry) map.fitBounds(plannedLayer.getBounds(), {padding:[30,30]});
+
+      const allPaths = response.paths;
+      const bestPathGeoJSON = allPaths[0]; 
+      currentRunGeoJSON = bestPathGeoJSON; // Store the best path for saving
+
+      let iterationIdx = 0;
+      const displayNextPath = () => {
+          if (iterationTimeout) clearTimeout(iterationTimeout);
+          
+          const currentPathToShow = allPaths[iterationIdx];
+          plannedLayer.clearLayers().addData(currentPathToShow);
+          if (currentPathToShow.geometry) map.fitBounds(plannedLayer.getBounds(), {padding:[40,40], maxZoom: 17 });
+          
+          const props = currentPathToShow.properties || {};
+          const distM = props.distance_m || 0;
+          const distMi = (distM / 1609.34).toFixed(2);
+          const percNew = (props.percentage_new_distance || 0).toFixed(1);
+          msgDiv.textContent = `Showing option ${iterationIdx + 1}/${allPaths.length}: ${distMi}mi, ${percNew}% new`;
+
+          iterationIdx++;
+          // Show up to 3 alternatives, or fewer if less than 3 alternatives exist
+          const alternativesToShow = Math.min(allPaths.length -1, 2); // -1 because best is already one, max 2 more
+          if (iterationIdx <= alternativesToShow && iterationIdx < allPaths.length) { 
+              iterationTimeout = setTimeout(displayNextPath, 1200); 
+          } else {
+              plannedLayer.clearLayers().addData(bestPathGeoJSON); // Display best path permanently
+              if (bestPathGeoJSON.geometry) map.fitBounds(plannedLayer.getBounds(), {padding:[40,40]});
+              finalizePlannedRoute(bestPathGeoJSON); 
+          }
+      };
       
-      const props = gj.properties || {}; 
-      const distM = props.distance_m || 0;
-      const distMi = (distM / 1609.34).toFixed(2);
-      const ascentM = (props.total_ascent_m || 0).toFixed(0);
-      const descentM = (props.total_descent_m || 0).toFixed(0);
-      // MODIFIED: Display new segment percentage
-      const newDistM = (props.new_distance_m || 0);
-      const percNew = (props.percentage_new_distance || 0).toFixed(1);
-      
-      plannedRunInfoDiv.innerHTML = 
-        `<strong>Planned Run:</strong><br>` +
-        `Distance: ${distMi} mi (${(distM/1000).toFixed(2)} km)<br>` +
-        `Ascent: ${ascentM} m, Descent: ${descentM} m<br>` + // Combined ascent/descent line
-        `New Roads: ${(newDistM/1609.34).toFixed(2)} mi (${percNew}%)`;
-      
-      return fetch('/runs', { 
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            distance_m: props.distance_m, 
-            geojson: gj 
-        })
-      });
+      if (allPaths.length > 0) { 
+          displayNextPath(); 
+      }
+    })
+    .catch(err => { 
+        console.error("Error in proceedToPlanRoute fetching/processing paths:", err);
+        msgDiv.textContent = `Error: ${err.message || err}. Please try again.`;
+        plannedRunInfoDiv.innerHTML = (typeof err === 'string' && err.includes("No suitable route")) ? 'No route found.' : 'Route planning error.';
+        if(currentStartMarker) {currentStartMarker.remove(); currentStartMarker=null;}
+        plannedLayer.clearLayers();
+    });
+}
+
+function finalizePlannedRoute(finalGeoJSON) {
+    const props = finalGeoJSON.properties || {}; 
+    const distM = props.distance_m || 0;
+    const distMi = (distM / 1609.34).toFixed(2);
+    const ascentM = (props.total_ascent_m || 0).toFixed(0);
+    const descentM = (props.total_descent_m || 0).toFixed(0);
+    const newDistM = (props.new_distance_m || 0);
+    const percNew = (props.percentage_new_distance || 0).toFixed(1);
+    
+    plannedRunInfoDiv.innerHTML = 
+      `<strong>Planned Run:</strong><br>` +
+      `Distance: ${distMi} mi (${(distM/1000).toFixed(2)} km)<br>` +
+      `Ascent: ${ascentM} m, Descent: ${descentM} m<br>` +
+      `New Roads: ${(newDistM/1609.34).toFixed(2)} mi (${percNew}%)`;
+    
+    fetch('/runs', { 
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+          distance_m: props.distance_m, 
+          geojson: finalGeoJSON 
+      })
     })
     .then(r => { 
       if (!r.ok) return r.json().then(err => Promise.reject(`Saving run failed: ${err.error || r.statusText}`));
@@ -418,21 +511,21 @@ function proceedToPlanRoute(lat, lon) {
       if (res && res.run_id) {
         currentRunId = res.run_id;
         completeBtnEl.disabled = false;
-        msgDiv.textContent = 'Route planned! Ready to run or mark complete.';
+        msgDiv.textContent = 'Route generation complete! Ready to run or mark as completed.';
       } else { 
         msgDiv.textContent = 'Failed to save planned route details (no run_id).';
         plannedRunInfoDiv.innerHTML = 'Error saving plan.';
         if(currentStartMarker) {currentStartMarker.remove(); currentStartMarker=null;}
       }
     })
-    .catch(err => { 
-        console.error("Error in route planning/saving sequence:", err);
-        msgDiv.textContent = `Error: ${err.message || err}. Please try again.`; // Use err.message
-        plannedRunInfoDiv.innerHTML = (typeof err === 'string' && err.includes("No suitable route")) ? 'No route found.' : 'Route planning error.';
+    .catch(err => {
+        console.error("Error in finalizePlannedRoute (saving run):", err);
+        msgDiv.textContent = `Error saving planned run: ${err.message || err}.`;
+        plannedRunInfoDiv.innerHTML = 'Error saving plan.';
         if(currentStartMarker) {currentStartMarker.remove(); currentStartMarker=null;}
-        plannedLayer.clearLayers();
     });
 }
+
 
 completeBtnEl.onclick = () => {
   if (!currentRunId) {
@@ -452,7 +545,13 @@ completeBtnEl.onclick = () => {
     if (res.ok) {
       msgDiv.textContent = `Run ${currentRunId} marked as completed! Map updating...`;
       return fetchGraphData() 
-        .then(() => fetch('/status')) 
+        .then(() => { 
+            // MODIFIED: Zoom to graph layer bounds after completion and graph fetch
+            if (graphLayer.getLayers().length > 0) { 
+                map.fitBounds(graphLayer.getBounds(), {padding: [20,20]});
+            }
+            return fetch('/status');
+        }) 
         .catch(graphErr => { 
             console.error("Map refresh failed after completing run:", graphErr);
             msgDiv.textContent = "Run completed, but map failed to refresh. Status will update.";
@@ -464,13 +563,13 @@ completeBtnEl.onclick = () => {
     }
   })
   .then(statusResponse => { 
-    if (!statusResponse) return Promise.reject("No status response received.");
+    if (!statusResponse) return Promise.reject("No status response received (chain broken).");
     if (!statusResponse.ok) return statusResponse.json().then(err => Promise.reject(`Workspaceing status failed: ${err.error || statusResponse.statusText}`));
     return statusResponse.json();
   })
   .then(statusData => { 
     if (statusData) {
-      updateProgressWheel(statusData.done);
+      updateProgressBar(statusData.done); 
       updateZipLoadProgress(statusData.zips, statusData.ready); 
       updateUserRunProgressByZip(statusData.zips); 
       if (msgDiv.textContent.includes("updating") || msgDiv.textContent.includes("Status will update")) {
@@ -484,6 +583,7 @@ completeBtnEl.onclick = () => {
     if (currentStartMarker) { currentStartMarker.remove(); currentStartMarker = null; }
     completeBtnEl.disabled = true;
     currentRunId = null;
+    currentRunGeoJSON = null;
   })
   .catch(err => { 
     console.error("Error in complete run sequence:", err);
