@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Zephyr</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+body,html{margin:0;height:100%}
+#map{position:absolute;top:0;left:300px;right:0;bottom:0}
+#sidebar{position:absolute;top:0;left:0;width:300px;height:100%;
+         padding:8px;background:#f4f4f4;box-sizing:border-box;font:14px/1.3 sans-serif}
+.progress{width:64px;height:64px;margin:4px auto}
+.progress svg{width:64px;height:64px}
+.progress circle.bg{fill:none;stroke:#e5e7eb;stroke-width:5}
+.progress circle.fg{fill:none;stroke:#3b82f6;stroke-width:5;stroke-linecap:round;
+                    transform:rotate(-90deg);transform-origin:center}
+.progress text{font-size:15px;text-anchor:middle;dominant-baseline:central}
+#weather{position:absolute;top:10px;right:10px;z-index:800;
+         background:#fff;border:1px solid #666;padding:4px 6px;font:12px/1 sans-serif}
+.zipLine{font-size:12px}
+button{margin-top:4px;font:inherit}
+input{font:inherit}
+</style>
+</head>
+<body>
+<div id="sidebar">
+  <h3>Zephyr</h3>
+  <label>Zip codes:<br><input id="zips" style="width:100%"></label><br>
+  <button id="load">Load Roads</button>
+
+  <div class="progress">
+    <svg viewBox="0 0 36 36">
+      <circle class="bg" cx="18" cy="18" r="16"/>
+      <circle id="ring" class="fg" cx="18" cy="18" r="16"
+              stroke-dasharray="100 100" stroke-dashoffset="100"/>
+      <text id="pct" x="18" y="18">0%</text>
+    </svg>
+  </div>
+
+  <div id="zipProgress"></div><hr>
+
+  <button id="start">Plan Route</button><br>
+  <label><input id="avoid" type="checkbox"> Avoid hills</label><br>
+  <button id="completeBtn" disabled>Complete</button>
+  <div id="msg" style="font-size:12px;color:#444"></div>
+
+  <h4 style="margin:6px 0 2px">Preferences</h4>
+  Min °F <input id="tmin" type="number" style="width:60px">
+  Max °F <input id="tmax" type="number" style="width:60px"><br>
+  Max wind mph <input id="wmax" type="number" style="width:60px"><br>
+  Target mi <input id="target" type="number" style="width:60px"><br>
+  <button id="savePref">Save Prefs</button>
+</div>
+
+<div id="map"></div>
+<div id="weather" style="display:none"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map=L.map('map').setView([40.44,-79.99],13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+
+const graphLayer=L.geoJSON(null,{
+  style:f=>({color:f.properties.done?'green':'#888',
+             weight:f.properties.done?4:2})
+}).addTo(map);
+const plannedLayer=L.geoJSON(null,{style:{color:'red',weight:5}}).addTo(map);
+
+const ring=document.getElementById('ring'), pct=document.getElementById('pct');
+function wheel(p){ring.setAttribute('stroke-dashoffset',100-p);pct.textContent=p+'%';}
+function listZips(z){zipProgress.innerHTML='';
+  for(const [k,v] of Object.entries(z)){
+    const d=document.createElement('div');d.className='zipLine';
+    d.textContent=`${k}: ${v.done}%`;zipProgress.appendChild(d);}}
+
+/* weather */
+function refreshWx(){const c=map.getCenter();
+  fetch(`/weather?lat=${c.lat}&lon=${c.lng}`).then(r=>r.json()).then(w=>{
+    weather.style.display='block';
+    weather.textContent=`${w.temp_f}°F • ${w.short} • ${w.wind_mph} mph`;
+  });}
+map.on('moveend',refreshWx);
+
+let prefs={},runId=null,startM=null;
+
+/* init */
+Promise.all([fetch('/prefs').then(r=>r.json()),
+             fetch('/status').then(r=>r.json())])
+.then(([p,st])=>{
+  prefs=p; zips.value=p.zip_codes||''; tmin.value=p.tmin;tmax.value=p.tmax;
+  wmax.value=p.wmax; target.value=p.target; wheel(st.done); listZips(st.zips);
+  if(st.ready){
+    fetch('/graph').then(r=>r.json()).then(g=>{
+      graphLayer.addData(g); map.fitBounds(graphLayer.getBounds()); refreshWx();});
+  }else if(p.zip_codes){autoLoad(p.zip_codes.split(','));}
+});
+
+function autoLoad(list){
+  fetch('/set_zipcodes',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({zips:list})}).then(()=>poll());}
+
+function poll(){fetch('/status').then(r=>r.json()).then(st=>{
+  wheel(st.done); listZips(st.zips);
+  if(!st.ready){setTimeout(poll,1000);}
+  else fetch('/graph').then(r=>r.json()).then(g=>{
+    graphLayer.clearLayers();graphLayer.addData(g);
+    map.fitBounds(graphLayer.getBounds()); refreshWx();});
+});}
+
+load.onclick=()=>{
+  const list=zips.value.split(',').map(s=>s.trim()).filter(Boolean);
+  if(!list.length){alert('enter zips');return;}
+  graphLayer.clearLayers();plannedLayer.clearLayers();runId=null;
+  autoLoad(list);
+};
+
+start.onclick=()=>{
+  msg.textContent='Click start point';
+  map.once('click',e=>{
+    if(startM)startM.remove();
+    startM=L.marker(e.latlng).addTo(map);
+    fetch(`/plan_auto?lat=${e.latlng.lat}&lon=${e.latlng.lng}&avoid=${avoid.checked}`)
+      .then(r=>r.json()).then(gj=>{
+        plannedLayer.clearLayers();plannedLayer.addData(gj);
+        return fetch('/runs',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({distance_m:gj.properties.distance_m,geojson:gj})});
+      }).then(r=>r.json()).then(res=>{
+        runId=res.run_id; completeBtn.disabled=false; msg.textContent='Route planned!';
+      });
+  });
+};
+
+completeBtn.onclick=()=>{
+  if(!runId)return;
+  fetch('/runs',{method:'PUT',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({run_id:runId})})
+  .then(()=>{plannedLayer.setStyle({color:'green',weight:4});})
+  .then(()=>fetch('/graph')).then(r=>r.json()).then(g=>{
+    graphLayer.clearLayers();graphLayer.addData(g);
+    map.fitBounds(graphLayer.getBounds()); refreshWx();
+    if(startM){startM.remove();startM=null;}
+    return fetch('/status');
+  }).then(r=>r.json()).then(st=>{
+    wheel(st.done); listZips(st.zips);
+    plannedLayer.clearLayers();
+    completeBtn.disabled=true; runId=null; msg.textContent='Completed!';
+  });
+};
+
+savePref.onclick=()=>{
+  fetch('/prefs',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({tmin:+tmin.value,tmax:+tmax.value,
+                         wmax:+wmax.value,target:+target.value})})
+  .then(()=>alert('Saved'));
+};
+</script>
+</body>
+</html>

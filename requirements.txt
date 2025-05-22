@@ -1,0 +1,9 @@
+Flask
+Flask_SQLAlchemy
+osmnx
+networkx
+Shapely
+requests
+geopy
+rasterio
+scikit-learn
