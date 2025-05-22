@@ -248,15 +248,17 @@ def edge_coords(u, v):
 
 def path_geojson(path):
     coords = []
+    dist = 0.0
     for u, v in zip(path, path[1:]):
         seg = edge_coords(u, v)
         if coords:
             seg = seg[1:]
         coords.extend(seg)
+        dist += G[u][v][min(G[u][v].keys())].get("length", 1.0)
     return {
         "type": "Feature",
         "geometry": mapping(LineString(coords)),
-        "properties": {"distance_m": LineString(coords).length, "plan": True},
+        "properties": {"distance_m": dist, "plan": True},
     }
 
 
