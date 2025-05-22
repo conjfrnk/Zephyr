@@ -109,13 +109,17 @@ LOCK = threading.Lock()
 ROAD_FILTER = '["highway"]["highway"!~"footway|path|steps|pedestrian|cycleway|motorway|motorway_link|trunk|trunk_link"]'
 
 
-def done_pct(graph_obj):
+def done_pct(graph_obj): # Global percentage done
     if not graph_obj or graph_obj.number_of_edges() == 0:
         return 0
+    # This calculates based on number of *distinct done edges in DB* vs *total edges in current G*
+    # This might not be a true "percentage of total miles" if edge lengths vary.
+    # For a more accurate "miles done / total miles", see total_done_length_m / total_graph_length_m in /status
     with app.app_context():
-        done_count = db.session.query(DoneEdge).count()
+        done_count = db.session.query(DoneEdge).count() 
     total_graph_edges = graph_obj.number_of_edges()
     if total_graph_edges == 0: return 0
+    # A simple edge count percentage.
     return int(100 * done_count / total_graph_edges) if total_graph_edges > 0 else 0
 
 
@@ -158,10 +162,12 @@ def publish_graph(graph_obj, zips):
         else:
             elev_pct = 0
 
+        # Note: current_done_pct is a global percentage of unique *edges run* vs *total edges*.
+        # For per-zip completion, ZIP_STATUS["done"] would need zip-specific calculation.
         current_done_pct = done_pct(G) 
         for z in zips:
             zip_data = ZIP_STATUS.get(z, {"road": 0, "elev": 0})
-            zip_data["done"] = current_done_pct # This is global done %
+            zip_data["done"] = current_done_pct # Assigning global done percentage here
             zip_data["elev"] = elev_pct
             if G: 
                 zip_data["road"] = 100
@@ -421,9 +427,7 @@ def path_geojson(path_nodes, graph_ref):
         },
     }
 
-# MODIFIED: Reverted auto_path to use single nx.shortest_path for legs to avoid MultiGraph error.
-# Still aims to generate multiple candidates and return top N.
-def auto_path(lat, lon, target_miles, avoid_hills, num_intermediate_samples=40, top_n_paths_to_return=5): # k_paths_per_leg removed
+def auto_path(lat, lon, target_miles, avoid_hills, num_intermediate_samples=30, top_n_paths_to_return=5):
     if not G or G.number_of_nodes() == 0:
         print("auto_path (loop): Graph not ready or empty.")
         return None
@@ -445,8 +449,8 @@ def auto_path(lat, lon, target_miles, avoid_hills, num_intermediate_samples=40, 
     leg1_weight_func = weight_factory(avoid_hills=avoid_hills, prioritize_new_roads=True, temp_avoid_node_pairs=None)
     
     half_target_m = target_m / 2.0
-    min_intermediate_radius_m = max(200.0, half_target_m * 0.20) # Adjusted radius slightly
-    max_intermediate_radius_m = max(800.0, half_target_m * 0.75) # Adjusted radius slightly
+    min_intermediate_radius_m = max(250.0, half_target_m * 0.25) 
+    max_intermediate_radius_m = max(750.0, half_target_m * 0.75)
     
     intermediate_nodes = []
     for node_id, node_data in G.nodes(data=True):
@@ -459,14 +463,14 @@ def auto_path(lat, lon, target_miles, avoid_hills, num_intermediate_samples=40, 
         intermediate_nodes = random.sample(intermediate_nodes, num_intermediate_samples)
     
     if not intermediate_nodes:
-        fallback_radius = max(400.0, half_target_m * 0.6)
+        fallback_radius = max(500.0, half_target_m * 0.6) 
         for node_id, node_data in G.nodes(data=True):
             if node_id == start_node: continue
             if node_id in intermediate_nodes: continue 
             if dist_m(start_node_y, start_node_x, node_data['y'], node_data['x']) <= fallback_radius:
                 intermediate_nodes.append(node_id)
-        if len(intermediate_nodes) > int(num_intermediate_samples * 0.75) : 
-             intermediate_nodes = random.sample(intermediate_nodes, int(num_intermediate_samples * 0.75))
+        if len(intermediate_nodes) > int(num_intermediate_samples * 0.8) : 
+             intermediate_nodes = random.sample(intermediate_nodes, int(num_intermediate_samples * 0.8))
 
     print(f"auto_path (loop): Testing {len(intermediate_nodes)} intermediate nodes.")
     if not intermediate_nodes: return None
@@ -475,7 +479,6 @@ def auto_path(lat, lon, target_miles, avoid_hills, num_intermediate_samples=40, 
 
     for intermediate_node in intermediate_nodes:
         try:
-            # Using nx.shortest_path instead of nx.shortest_simple_paths
             path1_nodes = nx.shortest_path(G, source=start_node, target=intermediate_node, weight=leg1_weight_func)
             if len(path1_nodes) < 2: continue
 
@@ -491,6 +494,7 @@ def auto_path(lat, lon, target_miles, avoid_hills, num_intermediate_samples=40, 
             path_details = _calculate_path_details(loop_path_nodes, G, globally_done_set_for_loops)
             if not path_details.get("valid"): continue
             
+            # Broad initial filter for loops
             if target_m * 0.5 <= path_details['distance_m'] <= target_m * 1.75: 
                 candidate_loop_paths_details.append({
                     'path': loop_path_nodes, 
@@ -499,36 +503,40 @@ def auto_path(lat, lon, target_miles, avoid_hills, num_intermediate_samples=40, 
                 })
         except (nx.NetworkXNoPath, nx.NodeNotFound): continue
         except Exception as e: 
-            print(f"Error constructing loop via intermediate {intermediate_node}: {e}")
+            print(f"Error constructing loop via intermediate {intermediate_node}: {type(e).__name__} {e}") # Print type of error
             continue
     
     if not candidate_loop_paths_details:
         print("auto_path (loop): No candidate loops constructed after iterating intermediates.")
         return None
 
+    # Sort candidates: primary by newness (desc), secondary by distance to target (asc)
     candidate_loop_paths_details.sort(key=lambda p: (-p['percentage_new'], abs(p['distance'] - target_m)))
     
-    final_candidates = [
+    # Stricter final filter for distance for the "ideal" paths
+    final_candidates_ideal_distance = [
         p for p in candidate_loop_paths_details
         if p['distance'] >= target_m * 0.75 and p['distance'] <= target_m * 1.25 
     ]
     
-    if not final_candidates: 
-        final_candidates = candidate_loop_paths_details[:top_n_paths_to_return]
-        if final_candidates:
-            print(f"auto_path (loop): No loops in ideal distance range, returning best {len(final_candidates)} overall (newness prioritized).")
-    else:
-        final_candidates = final_candidates[:top_n_paths_to_return]
-
-    if not final_candidates:
+    top_n_to_return_list = []
+    if final_candidates_ideal_distance:
+        top_n_to_return_list = final_candidates_ideal_distance[:top_n_paths_to_return]
+        # print(f"auto_path (loop): Selected {len(top_n_to_return_list)} paths from ideal distance range, prioritized by newness.")
+    elif candidate_loop_paths_details: 
+        top_n_to_return_list = candidate_loop_paths_details[:top_n_paths_to_return]
+        # print(f"auto_path (loop): No loops in ideal distance range, returning best {len(top_n_to_return_list)} overall (newness prioritized).")
+    
+    if not top_n_to_return_list:
         print("auto_path (loop): No paths left after all filtering.")
         return None
 
-    selected_paths_nodes = [p['path'] for p in final_candidates]
+    selected_paths_nodes = [p['path'] for p in top_n_to_return_list]
     
     if selected_paths_nodes:
-        print(f"auto_path (loop): Returning {len(selected_paths_nodes)} candidate paths. Top choice: newness {final_candidates[0]['percentage_new']:.1f}%, dist {final_candidates[0]['distance']:.0f}m.")
-    else:
+        best_p_details = top_n_to_return_list[0]
+        print(f"auto_path (loop): Returning {len(selected_paths_nodes)} candidate paths. Top choice: newness {best_p_details['percentage_new']:.1f}%, dist {best_p_details['distance']:.0f}m.")
+    else: 
         print("auto_path (loop): No loop path selected (empty final_candidates).")
         
     return selected_paths_nodes if selected_paths_nodes else None
@@ -557,33 +565,59 @@ def prefs():
         "zip_codes": p_obj.zip_codes,
     })
 
+# MODIFIED /status to include mileage stats
 @app.route("/status")
 def status():
     global_done_pct = done_pct(G) if G else 0
-    current_zip_status_copy = {}
+    total_graph_length_m = 0.0
+    total_done_length_m = 0.0
+
+    current_zip_status_copy = {} # To avoid holding lock for too long
+    is_graph_ready_locked = False # Value from within lock
+
     with LOCK:
         current_zip_status_copy = ZIP_STATUS.copy()
-        is_graph_ready = GRAPH_READY
+        is_graph_ready_locked = GRAPH_READY
+        graph_instance = G # Copy G reference under lock
+
+    if is_graph_ready_locked and graph_instance:
+        for u, v, data in graph_instance.edges(data=True):
+            total_graph_length_m += data.get('length', 0.0)
+        
+        with app.app_context(): 
+            done_edges_db = DoneEdge.query.all()
+        for done_edge_db_entry in done_edges_db:
+            u, v, k = done_edge_db_entry.u, done_edge_db_entry.v, done_edge_db_entry.key
+            if graph_instance.has_edge(u, v, k): # Check specific key
+                total_done_length_m += graph_instance.edges[u,v,k].get('length', 0.0)
+            # else: edge from DB not in current graph G (e.g. different zips loaded) - do nothing
+
     final_zip_status = {}
     for zc, data in current_zip_status_copy.items():
         current_elev_pct = data.get("elev", 0) 
-        if is_graph_ready and G and zc in CURRENT_ZIPS : 
-            if G.number_of_nodes() > 0: 
-                elev_count = sum(1 for _, d_node in G.nodes(data=True) if "elevation" in d_node and d_node['elevation'] is not None)
-                current_elev_pct = int(100 * elev_count / G.number_of_nodes()) if G.number_of_nodes() > 0 else 100
+        if is_graph_ready_locked and graph_instance and zc in CURRENT_ZIPS : 
+            if graph_instance.number_of_nodes() > 0: 
+                elev_count = sum(1 for _, d_node in graph_instance.nodes(data=True) if "elevation" in d_node and d_node['elevation'] is not None)
+                current_elev_pct = int(100 * elev_count / graph_instance.number_of_nodes()) if graph_instance.number_of_nodes() > 0 else 100
             else: 
                 current_elev_pct = 100 
         
         final_zip_status[zc] = {
-            "road": data.get("road", 100 if is_graph_ready and G and zc in CURRENT_ZIPS else 0),
+            "road": data.get("road", 100 if is_graph_ready_locked and graph_instance and zc in CURRENT_ZIPS else 0),
             "elev": current_elev_pct,
-            "done": global_done_pct 
+            "done": global_done_pct # This is overall edge count percentage
         }
-        if not (is_graph_ready and zc in CURRENT_ZIPS):
+        if not (is_graph_ready_locked and zc in CURRENT_ZIPS):
              final_zip_status[zc]["road"] = data.get("road", 0)
              final_zip_status[zc]["elev"] = data.get("elev",0)
 
-    return jsonify({"ready": is_graph_ready, "zips": final_zip_status, "done": global_done_pct})
+    return jsonify({
+        "ready": is_graph_ready_locked, 
+        "zips": final_zip_status, 
+        "done_edge_pct": global_done_pct, # Renamed for clarity
+        "total_graph_length_m": total_graph_length_m,
+        "total_done_length_m": total_done_length_m
+    })
 
 @app.route("/set_zipcodes", methods=["POST"])
 def set_zips():
@@ -703,6 +737,8 @@ def runs():
                     u_node, v_node = path_node_ids[i], path_node_ids[i+1]
                     if u_node == v_node: continue
                     if G.has_edge(u_node, v_node):
+                        # Mark all parallel edges for the (u,v) segment from the path
+                        # This is a simple way; a more precise way would require storing the exact keys from path_geojson.
                         for k_edge in G[u_node][v_node]: 
                             if not DoneEdge.query.filter_by(u=u_node, v=v_node, key=k_edge).first():
                                 db.session.add(DoneEdge(u=u_node, v=v_node, key=k_edge))
@@ -710,13 +746,13 @@ def runs():
             
             if new_done_edges_added_in_tx:
                 db.session.commit() 
-                print(f"Committed {db.session.query(DoneEdge).count()} total done edges to DB for run {rid}.")
+                print(f"Committed DoneEdges. Total in DB: {db.session.query(DoneEdge).count()}.")
             else:
                 db.session.commit() 
-                print(f"Run {rid} status updated to completed. No new edges added to DoneEdge table this time.")
+                print(f"Run {rid} status updated. No new edges added to DoneEdge.")
             
-            if G: ALL_EDGES_GJ = edges_geojson(G) # Always refresh after commit
-            print("Regenerated ALL_EDGES_GJ for map display.")
+            if G: ALL_EDGES_GJ = edges_geojson(G) # Always refresh after potential DB change
+            print("Regenerated ALL_EDGES_GJ for map display after run completion.")
 
         except (json.JSONDecodeError, KeyError, TypeError) as e:
             print(f"Error processing run completion for run_id {rid}: {e}")
