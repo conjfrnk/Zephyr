@@ -1,5 +1,5 @@
 Flask
-Flask_SQLAlchemy
+Flask-SQLAlchemy
 osmnx
 networkx
 Shapely
