@@ -24,102 +24,290 @@ Contact: Connor Frank <conjfrnk@gmail.com>
 <title>Zephyr</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
-body,html{margin:0;height:100%; font-family: sans-serif;}
-#map{position:absolute;top:0;left:300px;right:0;bottom:0}
-#sidebar{position:absolute;top:0;left:0;width:300px;height:100%;
-        padding:10px;background:#f4f4f4;box-sizing:border-box;font:14px/1.4 sans-serif; overflow-y: auto;}
-
-.progress-bar-container{display: flex; align-items: center; margin: 10px auto; width: 90%;}
-#progress-bar-text{margin-right: 10px; font-size: 16px; width: 55px; text-align: right; color: #333;}
-.progress-bar-outer{flex-grow: 1; background-color: #e5e7eb; border-radius: 5px; height: 22px; padding: 2px; border: 1px solid #ccc;}
-#progress-bar-inner{width: 0%; background-color: #3b82f6; height: 100%; border-radius: 3px; transition: width 0.3s ease-in-out; text-align: center; color: white; font-size:12px; line-height:18px;}
-
-#weather{position:absolute;top:10px;right:10px;z-index:800;
-        background:rgba(255,255,255,0.9);border:1px solid #ccc;padding:5px 8px;font:12px/1.2 sans-serif; border-radius: 4px;}
-.zipLine{font-size:12px; margin: 3px 0; padding: 2px; background-color: #fff; border: 1px solid #ddd; border-radius: 3px;}
-.userZipLine{font-size:13px; margin: 4px 0; padding: 3px;}
-#mileageStatsDisplay{text-align: center; margin-top: 10px; font-size: 13px; color: #555;} /* Style for mileage stats */
-button{margin-top:8px; margin-bottom: 4px; font:inherit; padding: 6px 10px; background-color: #3b82f6; color:white; border:none; border-radius:4px; cursor:pointer;}
-button:hover{background-color: #2563eb;}
-button:disabled{background-color: #9ca3af; cursor:not-allowed;}
-input[type="text"], input[type="number"]{font:inherit; padding: 4px; border:1px solid #ccc; border-radius:3px; margin-bottom:4px; box-sizing: border-box;}
-label{display: block; margin-bottom: 2px;}
-hr{border:none; border-top:1px solid #ddd; margin: 15px 0;}
-h3,h4{margin-top:15px; margin-bottom:5px; color:#333;}
-#msg{font-size:12px;color:#444; min-height: 1.5em; margin-top:5px; background-color: #e0e0e0; padding:5px; border-radius:3px;}
-.leaflet-marker-icon { font-weight: bold; } 
-.start-finish-pin-start { background-color: lightgreen; } 
-.start-finish-pin-finish { background-color: lightcoral; }
-#plannedRunInfo { margin-top:10px; margin-bottom: 5px; padding:8px; background-color:#e9e9f2; border: 1px solid #d0d0e0; border-radius:4px; font-size:13px; line-height:1.5;}
-#plannedRunInfo strong {color: #333;}
-
-.github-button-link { /* Styling for the GitHub button link */
-    display: inline-flex; 
-    align-items: center;
-    padding: 8px 15px;
-    background-color: #24292e; 
-    color: white;
-    text-decoration: none;
-    border-radius: 6px;
-    font-size: 13px;
-    transition: background-color 0.2s;
-    border: 1px solid #1b1f23;
+:root {
+  --primary-color: #3b82f6;
+  --primary-hover: #2563eb;
+  --secondary-color: #6b7280;
+  --light-gray: #f9fafb;
+  --medium-gray: #e5e7eb;
+  --dark-gray: #4b5563;
+  --text-color: #1f2937;
+  --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --border-radius: 8px;
 }
-.github-button-link:hover {
-    background-color: #40464d;
+
+body,html{
+  margin:0;
+  height:100%; 
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--light-gray);
+  color: var(--text-color);
 }
-.github-button-link svg.github-svg-icon {
-    margin-right: 8px;
-    fill: currentColor; 
-    width: 18px; /* Slightly larger icon */
-    height: 18px;
+
+#map{
+  position:absolute;
+  top:0;
+  left:350px;
+  right:0;
+  bottom:0
+}
+
+#sidebar{
+  position:absolute;
+  top:0;
+  left:0;
+  width:350px;
+  height:100%;
+  padding:20px;
+  background:#fff;
+  box-sizing:border-box;
+  font:14px/1.4 sans-serif; 
+  overflow-y: auto;
+  box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+}
+
+.card {
+  background: #fff;
+  padding: 15px;
+  margin-bottom: 15px;
+  border-radius: var(--border-radius);
+  box-shadow: var(--card-shadow);
+}
+
+h3 {
+  font-size: 20px;
+  margin-bottom: 10px;
+  color: var(--primary-color);
+}
+
+h4 {
+  font-size: 16px;
+  margin-top: 15px;
+  margin-bottom: 5px;
+  color: var(--dark-gray);
+}
+
+button {
+  margin-top:8px;
+  margin-bottom: 4px;
+  font:inherit;
+  padding: 10px 15px;
+  background-color: var(--primary-color);
+  color:white;
+  border:none;
+  border-radius:var(--border-radius);
+  cursor:pointer;
+  transition: background-color 0.2s;
+  width: 100%;
+}
+
+button:hover{
+  background-color: var(--primary-hover);
+}
+
+button:disabled{
+  background-color: #9ca3af;
+  cursor:not-allowed;
+}
+
+input[type="text"], input[type="number"]{
+  font:inherit;
+  padding: 8px;
+  border:1px solid #ccc;
+  border-radius:var(--border-radius);
+  margin-bottom:4px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+label{
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+
+#msg {
+  font-size:14px;
+  color: var(--dark-gray);
+  min-height: 1.5em;
+  margin-top:10px;
+  background-color: var(--medium-gray);
+  padding:10px;
+  border-radius:var(--border-radius);
+  text-align: center;
+}
+
+.progress-bar-container{
+  display: flex;
+  align-items: center;
+  margin: 10px auto;
+  width: 100%;
+}
+
+#progress-bar-text{
+  margin-right: 10px;
+  font-size: 16px;
+  width: 60px;
+  text-align: right;
+  color: var(--dark-gray);
+}
+
+.progress-bar-outer{
+  flex-grow: 1;
+  background-color: var(--medium-gray);
+  border-radius: 5px;
+  height: 22px;
+  padding: 2px;
+  border: 1px solid #ccc;
+}
+
+#progress-bar-inner{
+  width: 0%;
+  background-color: var(--primary-color);
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease-in-out;
+  text-align: center;
+  color: white;
+  font-size:12px;
+  line-height:18px;
+}
+
+.route-option {
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  margin-bottom: 5px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+.route-option:hover {
+  background-color: #f0f0f0;
+}
+.route-option.selected {
+  background-color: var(--primary-color);
+  color: white;
+  border-color: var(--primary-hover);
+}
+#plannedRunInfo h4 {
+  margin-top: 0;
+}
+.message-container {
+    margin-top: 10px;
+}
+.msg {
+    padding: 10px;
+    border-radius: 5px;
+    text-align: center;
+    font-weight: 500;
+}
+.msg.loading {
+    background-color: #e2e3e5;
+    color: #383d41;
+}
+.msg.success {
+    background-color: #d4edda;
+    color: #155724;
+}
+.msg.error {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+.github-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: #24292e;
+  color: white;
+  text-decoration: none;
+  border-radius: 6px;
+  font-size: 13px;
+  transition: background-color 0.2s;
+}
+.github-link:hover {
+  background-color: #40464d;
+  color: white;
+  text-decoration: none;
+}
+#weather {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 800;
+  background: rgba(255,255,255,0.95);
+  border: 1px solid #ccc;
+  padding: 8px 12px;
+  font: 12px/1.2 sans-serif;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 </style>
 </head>
 <body>
+
 <div id="sidebar">
-  <h3>Zephyr Route Planner</h3>
-  <label for="zips">Zip codes (e.g., 15243 15228):</label>
-  <input id="zips" type="text" style="width:calc(100% - 10px);" placeholder="Enter zip codes">
-  <button id="load">Load Roads</button>
+  <div class="card">
+    <h3>Zephyr Route Planner</h3>
+    <label for="zips">Zip codes (e.g., 15243 15228):</label>
+    <input id="zips" type="text" placeholder="Enter zip codes">
+    <button id="load">Load Roads</button>
+    <div id="load-msg-container" class="message-container"></div>
+  </div>
 
-  <div id="loadProgressDisplay" style="margin-top:10px;"></div>
-  <hr>
+  <div class="card">
+    <h4>Route Planning</h4>
+    <button id="start">Plan New Route</button><br>
+    <label><input id="avoid_hills" type="checkbox"> Avoid hills</label>
+    <div id="plan-msg-container" class="message-container"></div>
+  </div>
 
-  <button id="start">Plan New Route</button><br>
-  <label><input id="avoid_hills" type="checkbox"> Avoid hills</label><br>
-  
-  <div id="plannedRunInfo"></div> 
-  
-  <button id="completeBtn" disabled>Mark Run as Completed</button>
-  <div id="msg">Welcome! Load zip codes to begin.</div>
-  <hr>
-  
-  <h3 style="text-align:center;">Overall Activity Progress</h3>
-  <div class="progress-bar-container">
-    <span id="progress-bar-text">0%</span>
-    <div class="progress-bar-outer">
-      <div id="progress-bar-inner"></div>
+  <div id="plannedRunInfo" class="card" style="display:none;"></div>
+
+  <div class="card">
+    <h4>Activity Progress</h4>
+    <div class="progress-bar-container">
+      <span id="progress-bar-text">0%</span>
+      <div class="progress-bar-outer">
+        <div id="progress-bar-inner"></div>
+      </div>
+    </div>
+    <div id="mileageStatsDisplay" style="text-align: center;"></div>
+  </div>
+
+  <div class="card">
+    <h4>Preferences</h4>
+    <label for="tmin">Min Ideal Temp (°F):</label>
+    <input id="tmin" type="number">
+    <label for="tmax">Max Ideal Temp (°F):</label>
+    <input id="tmax" type="number">
+    <label for="wmax">Max Wind (mph):</label>
+    <input id="wmax" type="number">
+    <label for="target">Target Distance (mi):</label>
+    <input id="target" type="number">
+    <button id="savePref">Save Preferences</button>
+    <div id="prefs-msg-container" class="message-container"></div>
+  </div>
+
+  <div class="card">
+    <h4>About Zephyr</h4>
+    <p style="font-size: 13px; line-height: 1.4; color: #666;">
+      Zephyr is a smart route planner that helps you explore your neighborhood systematically. 
+      It generates routes that prioritize new roads you haven't run yet, helping you discover 
+      more of your area while avoiding repetitive paths.
+    </p>
+    <p style="font-size: 13px; line-height: 1.4; color: #666; margin-top: 10px;">
+      The app considers weather conditions and your preferences to create optimal routes. 
+      As you complete runs, it tracks your progress and suggests routes that cover new territory.
+    </p>
+    <div style="text-align: center; margin-top: 15px;">
+      <a href="https://github.com/conjfrnk/Zephyr" target="_blank" rel="noopener noreferrer" class="github-link">
+        <svg style="width: 16px; height: 16px; margin-right: 5px; vertical-align: middle;" viewBox="0 0 16 16" fill="currentColor">
+          <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21-.15.46-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"></path>
+        </svg>
+        View on GitHub
+      </a>
     </div>
   </div>
-  <div id="mileageStatsDisplay"></div> 
-  <div id="userZipProgressDisplay" style="text-align:center; margin-top:5px;"></div>
-  <hr>
-
-  <h4>Preferences</h4>
-  <label for="tmin">Min Ideal Temp (°F): <input id="tmin" type="number" style="width:70px"></label>
-  <label for="tmax">Max Ideal Temp (°F): <input id="tmax" type="number" style="width:70px"></label>
-  <label for="wmax">Max Wind (mph): <input id="wmax" type="number" style="width:70px"></label>
-  <label for="target">Target Distance (mi): <input id="target" type="number" style="width:70px"></label>
-  <button id="savePref">Save Preferences</button>
-
-  <div style="text-align: center; margin-top: 25px; margin-bottom:15px;">
-    <a href="https://github.com/conjfrnk/Zephyr" target="_blank" rel="noopener noreferrer" class="github-button-link">
-        <svg class="github-svg-icon" height="18" aria-hidden="true" viewBox="0 0 16 16" version="1.1" width="18"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21-.15.46-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"></path></svg>
-        <span>View on GitHub</span>
-    </a>
-  </div>
-
 </div>
 
 <div id="map"></div>
@@ -127,520 +315,342 @@ h3,h4{margin-top:15px; margin-bottom:5px; color:#333;}
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const map = L.map('map').setView([40.44, -79.99], 13); 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19,
-  attribution: '© OpenStreetMap contributors'
-}).addTo(map);
+document.addEventListener("DOMContentLoaded", function() {
 
-// Removed GitHubControl JavaScript class, as button is now static HTML
+  const map = L.map('map').setView([40.44, -79.99], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(map);
 
-const graphLayer = L.geoJSON(null, {
-  style: f => ({
-    color: f.properties.done ? 'green' : '#888', 
-    weight: f.properties.done ? 5 : 3, 
-    opacity: f.properties.done ? 0.9 : 0.65 
-  })
-}).addTo(map);
+  const graphLayer = L.geoJSON(null, {
+    style: f => ({
+      color: f.properties.done ? '#28a745' : '#6c757d',
+      weight: f.properties.done ? 4 : 2,
+      opacity: f.properties.done ? 0.8 : 0.6
+    })
+  }).addTo(map);
 
-const plannedLayer = L.geoJSON(null, {
-  style: { color: 'red', weight: 6, opacity: 0.9 }
-}).addTo(map);
+  const plannedLayer = L.geoJSON(null, {
+    style: { color: '#dc3545', weight: 5, opacity: 0.9 }
+  }).addTo(map);
 
-const zipsInput = document.getElementById('zips');
-const tminInput = document.getElementById('tmin'), tmaxInput = document.getElementById('tmax');
-const wmaxInput = document.getElementById('wmax'), targetInput = document.getElementById('target');
-const loadBtn = document.getElementById('load');
-const startBtn = document.getElementById('start');
-const avoidHillsCheck = document.getElementById('avoid_hills');
-const completeBtnEl = document.getElementById('completeBtn');
-const savePrefBtn = document.getElementById('savePref');
-const msgDiv = document.getElementById('msg');
-const loadProgressDiv = document.getElementById('loadProgressDisplay');
-const userZipProgressDiv = document.getElementById('userZipProgressDisplay');
-const weatherDiv = document.getElementById('weather');
-const plannedRunInfoDiv = document.getElementById('plannedRunInfo'); 
-const progressBarTextEl = document.getElementById('progress-bar-text');
-const progressBarInnerEl = document.getElementById('progress-bar-inner');
-const mileageStatsDiv = document.getElementById('mileageStatsDisplay'); // Get new div
+  // Set up weather refresh on map movement
+  map.on('moveend', refreshWeather);
 
+  const zipsInput = document.getElementById('zips');
+  const tminInput = document.getElementById('tmin'), tmaxInput = document.getElementById('tmax');
+  const wmaxInput = document.getElementById('wmax'), targetInput = document.getElementById('target');
+  const loadBtn = document.getElementById('load');
+  const startBtn = document.getElementById('start');
+  const avoidHillsCheck = document.getElementById('avoid_hills');
+  const savePrefBtn = document.getElementById('savePref');
+  const plannedRunInfoDiv = document.getElementById('plannedRunInfo');
+  const progressBarTextEl = document.getElementById('progress-bar-text');
+  const progressBarInnerEl = document.getElementById('progress-bar-inner');
+  const mileageStatsDiv = document.getElementById('mileageStatsDisplay');
+  const weatherDiv = document.getElementById('weather');
 
-let currentPrefs = {};
-let currentRunId = null;
-let currentRunGeoJSON = null; 
-let currentStartMarker = null;
-let startFinishMarkersLayer = L.layerGroup().addTo(map);
-let isGraphDataReady = false;
-let iterationTimeout = null; 
+  let currentPrefs = {};
+  let currentRunId = null;
+  let isGraphDataReady = false;
 
-function updateProgressBar(percentage) {
-  const p = parseInt(percentage) || 0;
-  if (progressBarTextEl) progressBarTextEl.textContent = p + '%';
-  if (progressBarInnerEl) {
-      progressBarInnerEl.style.width = p + '%';
+  function showLoading(message, containerId = null) {
+      const container = containerId ? document.getElementById(containerId) : null;
+      if(container) {
+          container.innerHTML = `<div class="msg loading"><img src="/static/spinner.gif" style="width: 20px; height: 20px; vertical-align: middle;"> ${message}</div>`;
+      }
   }
-}
 
-// MODIFIED: Function to update mileage stats display
-function updateMileageStats(doneMilesM, totalMilesM) {
+  function showMessage(message, isError = false, containerId = null) {
+    const container = containerId ? document.getElementById(containerId) : null;
+    if(container) {
+        const msgClass = isError ? 'msg error' : 'msg success';
+        container.innerHTML = `<div class="${msgClass}">${message}</div>`;
+        
+        // Clear message after some time if it's not an error
+        if(!isError) {
+            setTimeout(() => {
+                if(container.innerHTML.includes(message)) {
+                    container.innerHTML = '';
+                }
+            }, 4000);
+        }
+    }
+  }
+
+  function refreshWeather() {
+    if (!map) return;
+    const center = map.getCenter();
+    fetch(`/weather?lat=${center.lat}&lon=${center.lng}`)
+      .then(r => r.ok ? r.json() : Promise.reject(`Weather fetch failed: ${r.status}`))
+      .then(w => {
+        weatherDiv.style.display = 'block';
+        weatherDiv.textContent = `${w.temp_f}°F • ${w.short} • ${w.wind_mph} mph winds`;
+      })
+      .catch(err => { 
+        console.error("Error refreshing weather:", err); 
+        weatherDiv.style.display = 'none'; 
+      });
+  }
+
+  function updateProgressBar(percentage) {
+    const p = parseInt(percentage) || 0;
+    if (progressBarTextEl) progressBarTextEl.textContent = p + '%';
+    if (progressBarInnerEl) progressBarInnerEl.style.width = p + '%';
+  }
+
+  function updateMileageStats(doneMilesM, totalMilesM) {
     if (mileageStatsDiv) {
-        if (isGraphDataReady && totalMilesM != null && doneMilesM != null) { // Check if data is valid
-            const doneMi = (doneMilesM / 1609.34).toFixed(2);
-            const totalMi = (totalMilesM / 1609.34).toFixed(2);
-            mileageStatsDiv.innerHTML = `Unique Roads Traveled: <strong>${doneMi} mi</strong> / ${totalMi} mi`;
-        } else {
-            mileageStatsDiv.innerHTML = 'Load map to see mileage stats.';
-        }
-    }
-}
-
-
-function updateZipLoadProgress(zipsStatusData, graphReadyStatus) {
-  loadProgressDiv.innerHTML = '';
-  if (!zipsStatusData || Object.keys(zipsStatusData).length === 0) { 
-    if (graphReadyStatus && !zipsInput.value.trim()) {
-        loadProgressDiv.innerHTML = '<div class="zipLine">No zip codes loaded. Enter zips and click Load.</div>';
-    } else if (!graphReadyStatus && zipsInput.value.trim()) {
-        loadProgressDiv.innerHTML = '<div class="zipLine">Preparing to load specified zip codes...</div>';
-    } else {
-        loadProgressDiv.innerHTML = '<div class="zipLine">Enter zip codes to see loading progress.</div>';
-    }
-    return;
-  }
-
-  for (const [zipcode, status] of Object.entries(zipsStatusData)) {
-    const d = document.createElement('div');
-    d.className = 'zipLine';
-    let roadText = "Roads: Queued";
-    let elevText = "Elevation: Queued";
-
-    if (status.road === -1) { 
-        roadText = "Roads: Error";
-        elevText = "Elevation: -";
-    } else if (graphReadyStatus || (status.road != null && status.road > 0) || (status.elev != null && status.elev > 0)) { 
-        roadText = (status.road != null && status.road >= 100) ? "Roads: Loaded" : `Roads: Loading ${status.road || 0}%`;
-        if (status.road < 100) {
-            elevText = "Elevation: Waiting for roads";
-        } else {
-            elevText = (status.elev != null && status.elev >= 100) ? "Elevation: Loaded" : `Elevation: Loading ${status.elev || 0}%`;
-        }
-    }
-    d.textContent = `${zipcode}: ${roadText}, ${elevText}`;
-    loadProgressDiv.appendChild(d);
-  }
-}
-
-function updateUserRunProgressByZip(zipsStatusData) {
-  userZipProgressDiv.innerHTML = '';
-  if (!zipsStatusData || Object.keys(zipsStatusData).length === 0 && isGraphDataReady) { 
-     userZipProgressDiv.innerHTML = '<div class="userZipLine">Load zips to see run progress.</div>';
-     return;
-  }
-  if (!zipsStatusData) return; 
-
-  for (const [zipcode, status] of Object.entries(zipsStatusData)) {
-    const d = document.createElement('div');
-    d.className = 'userZipLine';
-    // Note: status.done is still global percentage of EDGES marked done.
-    // For per-zip actual miles, backend /status would need to provide that.
-    d.textContent = `${zipcode}: ${status.done || 0}% explored (by edge count)`; 
-    userZipProgressDiv.appendChild(d);
-  }
-}
-
-function refreshWeather() {
-  if (!map) return;
-  const center = map.getCenter();
-  fetch(`/weather?lat=${center.lat}&lon=${center.lng}`)
-    .then(r => r.ok ? r.json() : Promise.reject(`Weather fetch failed: ${r.status}`))
-    .then(w => {
-      weatherDiv.style.display = 'block';
-      weatherDiv.textContent = `${w.temp_f}°F • ${w.short} • ${w.wind_mph} mph winds`;
-    })
-    .catch(err => { console.error("Error refreshing weather:", err); weatherDiv.style.display = 'none'; });
-}
-map.on('moveend', refreshWeather);
-
-function initializeApp() {
-  Promise.all([
-    fetch('/prefs').then(r => r.json()),
-    fetch('/status').then(r => r.json())
-  ])
-  .then(([prefsData, statusData]) => {
-    currentPrefs = prefsData;
-    zipsInput.value = prefsData.zip_codes || '';
-    tminInput.value = prefsData.tmin;
-    tmaxInput.value = prefsData.tmax;
-    wmaxInput.value = prefsData.wmax; 
-    targetInput.value = prefsData.target; 
-
-    isGraphDataReady = statusData.ready;
-    updateProgressBar(statusData.done_edge_pct); // Use done_edge_pct from status
-    updateZipLoadProgress(statusData.zips, statusData.ready);
-    updateUserRunProgressByZip(statusData.zips);
-    updateMileageStats(statusData.total_done_length_m, statusData.total_graph_length_m); // MODIFIED
-    
-    if (statusData.ready) {
-      fetchGraphData().then(() => { 
-          if (graphLayer.getLayers().length > 0) map.fitBounds(graphLayer.getBounds(), {padding: [20,20]}); 
-          refreshWeather();
-      }); 
-    } else if (prefsData.zip_codes && prefsData.zip_codes.trim() !== '') { 
-      msgDiv.textContent = "Graph data loading for saved zip codes...";
-      pollStatus(); 
-    } else {
-      msgDiv.textContent = "Welcome! Enter Zip Codes and click Load Roads.";
-    }
-  })
-  .catch(error => {
-    console.error("Initialization error:", error);
-    msgDiv.textContent = "Error initializing app. Check console.";
-  });
-}
-
-function fetchGraphData() {
-  return fetch('/graph') 
-    .then(r => {
-      if (!r.ok) { 
-        if(isGraphDataReady) setTimeout(pollStatus, 3000); 
-        return Promise.reject(`Graph fetch error: ${r.status} ${r.statusText}`);
-      }
-      return r.json();
-    })
-    .then(graphGeoJSON => {
-      console.log("Fetched graph data for layer update. Number of features:", graphGeoJSON.features ? graphGeoJSON.features.length : 0);
-      let doneCountInGeoJSON = 0;
-      if (graphGeoJSON && graphGeoJSON.features) {
-          graphGeoJSON.features.forEach(f => {
-            if (f.properties && f.properties.done) doneCountInGeoJSON++;
-          });
-      }
-      console.log("Number of 'done:true' features in fetched GeoJSON:", doneCountInGeoJSON);
-      
-      graphLayer.clearLayers().addData(graphGeoJSON);
-      return graphGeoJSON; 
-    })
-    .catch(err => {
-        console.error("Error in fetchGraphData:", err);
-        msgDiv.textContent = "Failed to load map data. Check console.";
-        return Promise.reject(err); 
-    });
-}
-
-function pollStatus() {
-  fetch('/status')
-    .then(r => r.ok ? r.json() : Promise.reject(`Status fetch failed: ${r.statusText}`))
-    .then(statusData => {
-      isGraphDataReady = statusData.ready;
-      updateProgressBar(statusData.done_edge_pct); // Use done_edge_pct from status
-      updateZipLoadProgress(statusData.zips, statusData.ready);
-      updateUserRunProgressByZip(statusData.zips);
-      updateMileageStats(statusData.total_done_length_m, statusData.total_graph_length_m); // MODIFIED
-
-      if (!statusData.ready) {
-        if (!msgDiv.textContent.includes("loading")) msgDiv.textContent = "Map data is loading... Updates are live.";
-        setTimeout(pollStatus, 2000); 
+      if (isGraphDataReady && totalMilesM != null && doneMilesM != null) {
+        const doneMi = (doneMilesM / 1609.34).toFixed(2);
+        const totalMi = (totalMilesM / 1609.34).toFixed(2);
+        mileageStatsDiv.innerHTML = `<strong>${doneMi} mi</strong> of <strong>${totalMi} mi</strong> explored`;
       } else {
-        if (!msgDiv.textContent.includes("Route generation complete") && !msgDiv.textContent.includes("Planning route")) {
-             msgDiv.textContent = "Map data loaded. Ready to plan routes.";
-        }
-        fetchGraphData().then(() => { 
-            if (graphLayer.getLayers().length > 0 && (!map.getBounds().contains(graphLayer.getBounds()) || map.getZoom() < 13 ) ) { 
-                 map.fitBounds(graphLayer.getBounds(), {padding: [20,20]}); 
-            }
+        mileageStatsDiv.innerHTML = 'Load map to see mileage stats.';
+      }
+    }
+  }
+
+  function pollStatus() {
+    fetch('/status')
+      .then(r => r.ok ? r.json() : Promise.reject('Status fetch failed'))
+      .then(statusData => {
+        isGraphDataReady = statusData.ready;
+        updateProgressBar(statusData.done_edge_pct);
+        updateMileageStats(statusData.total_done_length_m, statusData.total_graph_length_m);
+
+        if (!statusData.ready) {
+          showLoading("Map data is loading...", 'load-msg-container');
+          setTimeout(pollStatus, 2000);
+        } else {
+          showMessage("Map data loaded. Ready to plan routes.", false, 'load-msg-container');
+          fetchGraphData().then(() => {
             refreshWeather();
-        }); 
-      }
-    })
-    .catch(err => {
-        console.error("Error polling status:", err);
-        if (!msgDiv.textContent.includes("Error")) msgDiv.textContent = "Error updating status. Will retry.";
-        setTimeout(pollStatus, 5000); 
-    });
-}
-
-loadBtn.onclick = () => {
-  const zipsToLoad = zipsInput.value.trim();
-  if (!zipsToLoad) {
-    alert('Please enter zip codes.');
-    return;
-  }
-  msgDiv.textContent = `Loading roads for: ${zipsToLoad}...`;
-  graphLayer.clearLayers();
-  plannedLayer.clearLayers();
-  plannedRunInfoDiv.innerHTML = ''; 
-  currentRunId = null;
-  currentRunGeoJSON = null;
-  completeBtnEl.disabled = true;
-  isGraphDataReady = false; 
-
-  fetch('/set_zipcodes', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ zips: zipsToLoad })
-  })
-  .then(r => r.ok ? r.json() : Promise.reject(`Set zips failed: ${r.statusText}`))
-  .then(response => {
-      if(response.started){
-        msgDiv.textContent = `Started loading for ${response.zips_being_loaded.join(', ')}. Polling for progress...`;
-        pollStatus(); 
-      } else {
-        msgDiv.textContent = response.error || "Failed to start loading zip codes.";
-      }
-  })
-  .catch(err => {
-    console.error("Error setting zip codes:", err);
-    msgDiv.textContent = `Error: ${err.message || err}`;
-  });
-};
-
-startBtn.onclick = () => {
-  if (!isGraphDataReady) {
-    msgDiv.textContent = "Map data is not ready. Please wait or load zip codes.";
-    return;
-  }
-  msgDiv.textContent = 'Fetching previous run locations... Click a pin or on map for custom start.';
-  plannedLayer.clearLayers();
-  plannedRunInfoDiv.innerHTML = ''; 
-  startFinishMarkersLayer.clearLayers();
-  if (currentStartMarker) { currentStartMarker.remove(); currentStartMarker = null; }
-  if (iterationTimeout) clearTimeout(iterationTimeout); 
-
-  fetch('/run_start_finish_points')
-    .then(r => r.ok ? r.json() : Promise.reject('Failed to fetch run start/finish points'))
-    .then(points => {
-      if (points && points.length > 0) {
-        points.forEach(p => {
-          const iconHtml = `<div style="background-color:${p.type === 'start' ? 'lightgreen' : 'lightcoral'}; padding: 5px; border-radius: 50%; border: 1px solid #333; text-align: center; line-height: 5px; font-size:10px; width:15px; height:15px;">${p.type === 'start' ? 'S' : 'F'}</div>`;
-          const customIcon = L.divIcon({ className: `start-finish-pin-${p.type}`, html: iconHtml, iconSize: [15,15], iconAnchor:[7.5, 7.5] });
-          const marker = L.marker([p.lat, p.lng], { icon: customIcon, title: `${p.type} of run ${p.run_id} (${p.status})` })
-            .addTo(startFinishMarkersLayer);
-          marker.on('click', (e) => {
-            L.DomEvent.stopPropagation(e);
-            startFinishMarkersLayer.clearLayers();
-            proceedToPlanRoute(e.latlng.lat, e.latlng.lng);
           });
-        });
-        msgDiv.textContent = 'Select a start/finish pin or click on the map for a custom start.';
-      } else {
-        msgDiv.textContent = 'No previous run locations found. Click on the map for a custom start.';
-      }
-      
-      map.once('click', (e) => {
-        startFinishMarkersLayer.clearLayers(); 
-        proceedToPlanRoute(e.latlng.lat, e.latlng.lng);
+        }
+      })
+      .catch(err => {
+        showMessage("Error updating status. Will retry.", true, 'load-msg-container');
+        setTimeout(pollStatus, 5000);
       });
-    })
-    .catch(err => {
-      console.error("Error fetching start/finish points:", err);
-      msgDiv.textContent = 'Error fetching locations. Click on map for custom start.';
-      map.once('click', (e) => { 
-        startFinishMarkersLayer.clearLayers();
-        proceedToPlanRoute(e.latlng.lat, e.latlng.lng);
+  }
+
+  function fetchGraphData() {
+    return fetch('/graph')
+      .then(r => r.ok ? r.json() : Promise.reject('Graph fetch error'))
+      .then(graphGeoJSON => {
+        graphLayer.clearLayers().addData(graphGeoJSON);
+        if (graphLayer.getLayers().length > 0) {
+          map.fitBounds(graphLayer.getBounds(), {padding: [20,20]});
+        }
+      })
+      .catch(err => {
+        console.error("Failed to load map data:", err);
       });
-    });
-};
+  }
 
-function proceedToPlanRoute(lat, lon) {
-  if (currentStartMarker) { currentStartMarker.remove(); }
-  currentStartMarker = L.marker([lat, lon]).addTo(map);
-  msgDiv.textContent = 'Planning route... this may take a moment.';
-  plannedRunInfoDiv.innerHTML = '<i>Planning...</i>'; 
-  completeBtnEl.disabled = true;
-  currentRunGeoJSON = null;
-  if (iterationTimeout) clearTimeout(iterationTimeout);
-
-  const avoidHills = avoidHillsCheck.checked;
-  fetch(`/plan_auto?lat=${lat}&lon=${lon}&avoid_hills=${avoidHills}`)
-    .then(r => {
-      if (!r.ok) return r.text().then(text => Promise.reject(`Route planning server error: ${r.status} ${text}`));
-      return r.json();
-    })
-    .then(response => { 
-      if (!response || !response.paths || response.paths.length === 0) { 
-          msgDiv.textContent = 'Could not find any suitable routes. Try different parameters or start point.';
-          plannedRunInfoDiv.innerHTML = 'No routes found.';
-          if(currentStartMarker) {currentStartMarker.remove(); currentStartMarker=null;}
-          plannedLayer.clearLayers();
-          return Promise.reject("No paths returned by backend."); 
-      }
-
-      const allPaths = response.paths;
-      currentRunGeoJSON = allPaths[0]; 
-
-      let iterationIdx = 0;
-      const displayNextPath = () => {
-          if (iterationTimeout) clearTimeout(iterationTimeout);
-          
-          const currentPathToShow = allPaths[iterationIdx];
-          plannedLayer.clearLayers().addData(currentPathToShow);
-          if (currentPathToShow.geometry) map.fitBounds(plannedLayer.getBounds(), {padding:[40,40], maxZoom: 17 });
-          
-          const props = currentPathToShow.properties || {};
-          const distM = props.distance_m || 0;
-          const distMi = (distM / 1609.34).toFixed(2);
-          const percNew = (props.percentage_new_distance || 0).toFixed(1);
-          msgDiv.textContent = `Showing option ${iterationIdx + 1}/${allPaths.length}: ${distMi}mi, ${percNew}% new`;
-
-          iterationIdx++;
-          const alternativesToDisplayCount = Math.min(allPaths.length -1, 2); 
-          if (iterationIdx <= alternativesToDisplayCount && iterationIdx < allPaths.length) { 
-              iterationTimeout = setTimeout(displayNextPath, 1200); 
-          } else {
-              plannedLayer.clearLayers().addData(currentRunGeoJSON); 
-              if (currentRunGeoJSON.geometry) map.fitBounds(plannedLayer.getBounds(), {padding:[40,40]});
-              finalizePlannedRoute(currentRunGeoJSON); 
-          }
-      };
-      
-      if (allPaths.length > 0) { 
-          displayNextPath(); 
-      }
-    })
-    .catch(err => { 
-        console.error("Error in proceedToPlanRoute fetching/processing paths:", err);
-        msgDiv.textContent = `Error: ${err.message || err}. Please try again.`;
-        plannedRunInfoDiv.innerHTML = (typeof err === 'string' && err.includes("No suitable route")) ? 'No route found.' : 'Route planning error.';
-        if(currentStartMarker) {currentStartMarker.remove(); currentStartMarker=null;}
-        plannedLayer.clearLayers();
-    });
-}
-
-function finalizePlannedRoute(finalGeoJSON) {
-    const props = finalGeoJSON.properties || {}; 
-    const distM = props.distance_m || 0;
-    const distMi = (distM / 1609.34).toFixed(2);
-    const ascentM = (props.total_ascent_m || 0).toFixed(0);
-    const descentM = (props.total_descent_m || 0).toFixed(0);
-    const newDistM = (props.new_distance_m || 0);
-    const percNew = (props.percentage_new_distance || 0).toFixed(1);
-    
-    plannedRunInfoDiv.innerHTML = 
-      `<strong>Planned Run:</strong><br>` +
-      `Distance: ${distMi} mi (${(distM/1000).toFixed(2)} km)<br>` +
-      `Ascent: ${ascentM} m, Descent: ${descentM} m<br>` +
-      `New Roads: ${(newDistM/1609.34).toFixed(2)} mi (${percNew}%)`;
-    
-    fetch('/runs', { 
+  loadBtn.onclick = () => {
+    const zipsToLoad = zipsInput.value.trim();
+    if (!zipsToLoad) {
+      showMessage('Please enter zip codes.', true, 'load-msg-container');
+      return;
+    }
+    showLoading(`Loading roads for: ${zipsToLoad}...`, 'load-msg-container');
+    fetch('/set_zipcodes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-          distance_m: props.distance_m, 
-          geojson: finalGeoJSON 
+      body: JSON.stringify({ zips: zipsToLoad })
+    })
+    .then(r => r.ok ? r.json() : Promise.reject('Set zips failed'))
+    .then(response => {
+        if(response.started){
+          pollStatus();
+        } else {
+          showMessage(response.error || "Failed to start loading zip codes.", true, 'load-msg-container');
+        }
+    })
+    .catch(err => {
+      showMessage(`Error: ${err.message || err}`, true, 'load-msg-container');
+    });
+  };
+
+  startBtn.onclick = () => {
+    if (!isGraphDataReady) {
+      showMessage("Map data is not ready.", true, 'plan-msg-container');
+      return;
+    }
+    showMessage("Click on the map to choose a starting point.", false, 'plan-msg-container');
+    map.once('click', (e) => {
+      planRoute(e.latlng.lat, e.latlng.lng);
+    });
+  };
+
+  function planRoute(lat, lon) {
+    showLoading('Planning route...', 'plan-msg-container');
+    const avoidHills = avoidHillsCheck.checked;
+    fetch(`/plan_auto?lat=${lat}&lon=${lon}&avoid_hills=${avoidHills}`)
+      .then(r => r.ok ? r.json() : Promise.reject('Route planning failed'))
+      .then(response => {
+        if (!response || !response.paths || response.paths.length === 0) {
+          showMessage('Could not find any suitable routes.', true, 'plan-msg-container');
+          return;
+        }
+        displayRouteOptions(response.paths);
+      })
+      .catch(err => {
+        showMessage('Error planning route.', true, 'plan-msg-container');
+      });
+  }
+
+  function displayRouteOptions(paths) {
+    plannedRunInfoDiv.innerHTML = '<h4>Select a Route</h4>';
+    plannedRunInfoDiv.style.display = 'block';
+
+    paths.forEach((path, index) => {
+      const props = path.properties;
+      const distMi = (props.distance_m / 1609.34).toFixed(2);
+      const percNew = (props.percentage_new_distance || 0).toFixed(1);
+
+      const optionDiv = document.createElement('div');
+      optionDiv.className = 'route-option';
+      optionDiv.innerHTML = `
+        <strong>Option ${index + 1}:</strong> ${distMi} mi, ${percNew}% new
+      `;
+      optionDiv.onclick = () => {
+        document.querySelectorAll('.route-option').forEach(el => el.classList.remove('selected'));
+        optionDiv.classList.add('selected');
+        plannedLayer.clearLayers().addData(path);
+        if (path.geometry) map.fitBounds(plannedLayer.getBounds(), {padding:[40,40]});
+      };
+      plannedRunInfoDiv.appendChild(optionDiv);
+    });
+
+    const acceptButton = document.createElement('button');
+    acceptButton.textContent = 'Accept Route';
+    acceptButton.onclick = () => {
+      const selectedOption = document.querySelector('.route-option.selected');
+      if (selectedOption) {
+        const selectedIndex = Array.from(plannedRunInfoDiv.children).indexOf(selectedOption) -1;
+        finalizePlannedRoute(paths[selectedIndex]);
+      }
+    };
+    plannedRunInfoDiv.appendChild(acceptButton);
+
+    const completeButton = document.createElement('button');
+    completeButton.id = 'completeBtn';
+    completeButton.textContent = 'Mark Run as Completed';
+    completeButton.disabled = true;
+    plannedRunInfoDiv.appendChild(completeButton);
+
+  }
+
+  function finalizePlannedRoute(finalGeoJSON) {
+    showLoading('Saving planned route...', 'plan-msg-container');
+    fetch('/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+          distance_m: finalGeoJSON.properties.distance_m,
+          geojson: finalGeoJSON
       })
     })
-    .then(r => { 
-      if (!r.ok) return r.json().then(err => Promise.reject(`Saving run failed: ${err.error || r.statusText}`));
-      return r.json();
-    })
-    .then(res => { 
+    .then(r => r.ok ? r.json() : Promise.reject('Saving run failed'))
+    .then(res => {
       if (res && res.run_id) {
         currentRunId = res.run_id;
-        completeBtnEl.disabled = false;
-        msgDiv.textContent = 'Route generation complete! Ready to run or mark as completed.'; 
-      } else { 
-        msgDiv.textContent = 'Failed to save planned route details (no run_id).';
-        plannedRunInfoDiv.innerHTML = 'Error saving plan.';
-        if(currentStartMarker) {currentStartMarker.remove(); currentStartMarker=null;}
+        showMessage('Route saved. Ready to run!', false, 'plan-msg-container');
+        const completeBtn = document.getElementById('completeBtn');
+        if(completeBtn) completeBtn.disabled = false;
+
+        completeBtn.onclick = () => {
+          completeRun(currentRunId);
+        };
+
+      } else {
+        showMessage('Failed to save planned route.', true, 'plan-msg-container');
       }
     })
     .catch(err => {
-        console.error("Error in finalizePlannedRoute (saving run):", err);
-        msgDiv.textContent = `Error saving planned run: ${err.message || err}.`;
-        plannedRunInfoDiv.innerHTML = 'Error saving plan.';
-        if(currentStartMarker) {currentStartMarker.remove(); currentStartMarker=null;}
+      showMessage('Error saving planned run.', true, 'plan-msg-container');
     });
-}
-
-
-completeBtnEl.onclick = () => {
-  if (!currentRunId) {
-    msgDiv.textContent = "No active run to complete.";
-    return;
   }
-  msgDiv.textContent = `Completing run ${currentRunId}...`;
-  plannedRunInfoDiv.innerHTML = '<i>Completing run...</i>';
 
-  fetch('/runs', { 
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ run_id: currentRunId })
-  })
-  .then(r => r.ok ? r.json() : r.text().then(text => Promise.reject(`Completing run server error: ${r.status} ${text}`)))
-  .then(res => { 
-    if (res.ok) {
-      msgDiv.textContent = `Run ${currentRunId} marked as completed! Map updating...`;
-      return fetchGraphData() 
-        .then(() => { 
-            if (graphLayer.getLayers().length > 0) { 
-                map.fitBounds(graphLayer.getBounds(), {padding: [20,20]}); // Zoom to full graph
-            }
-            return fetch('/status');
-        }) 
-        .catch(graphErr => { 
-            console.error("Map refresh failed after completing run:", graphErr);
-            msgDiv.textContent = "Run completed, but map failed to refresh. Status will update.";
-            return fetch('/status'); 
-        });
-    } else {
-      msgDiv.textContent = `Problem completing run: ${res.warning || 'Server indicated not OK.'}`;
-      return Promise.reject(new Error(res.warning || "Problem completing run on server."));
-    }
-  })
-  .then(statusResponse => { 
-    if (!statusResponse) return Promise.reject("No status response received (chain broken).");
-    // If fetch('/status') itself failed, statusResponse might not have .ok
-    if (!statusResponse.ok) { 
-        // Try to get error text if possible, otherwise use generic message
-        return statusResponse.text().then(text => Promise.reject(`Workspaceing status failed: ${statusResponse.statusText} ${text}`));
-    }
-    return statusResponse.json();
-  })
-  .then(statusData => { 
-    if (statusData) {
-      updateProgressBar(statusData.done_edge_pct); 
-      updateZipLoadProgress(statusData.zips, statusData.ready); 
-      updateUserRunProgressByZip(statusData.zips); 
-      updateMileageStats(statusData.total_done_length_m, statusData.total_graph_length_m); // MODIFIED
-      if (msgDiv.textContent.includes("updating") || msgDiv.textContent.includes("Status will update")) {
-        msgDiv.textContent = "Run completed, map and status updated!";
+  function completeRun(runId) {
+    showLoading(`Completing run ${runId}...`, 'plan-msg-container');
+    fetch('/runs', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ run_id: runId })
+    })
+    .then(r => r.ok ? r.json() : Promise.reject('Completing run failed'))
+    .then(res => {
+      if (res.ok) {
+        showMessage(`Run ${runId} marked as completed!`, false, 'plan-msg-container');
+        plannedLayer.clearLayers();
+        plannedRunInfoDiv.style.display = 'none';
+        pollStatus(); // Refresh status and map
+      } else {
+        showMessage(`Problem completing run: ${res.warning || 'Unknown error'}.`, true, 'plan-msg-container');
       }
-    } else if (!msgDiv.textContent.includes("Error")) { 
-         msgDiv.textContent = "Run completed; status update may have encountered an issue.";
-    }
-    plannedLayer.clearLayers(); 
-    plannedRunInfoDiv.innerHTML = ''; 
-    if (currentStartMarker) { currentStartMarker.remove(); currentStartMarker = null; }
-    completeBtnEl.disabled = true;
-    currentRunId = null;
-    currentRunGeoJSON = null;
-  })
-  .catch(err => { 
-    console.error("Error in complete run sequence:", err);
-    msgDiv.textContent = `Error completing run or updating view: ${err.message || err}`;
-  });
-};
+    })
+    .catch(err => {
+      showMessage('Error completing run.', true, 'plan-msg-container');
+    });
+  }
 
-savePrefBtn.onclick = () => {
-  const prefsToSave = {
-    tmin: parseFloat(tminInput.value),
-    tmax: parseFloat(tmaxInput.value),
-    wmax: parseFloat(wmaxInput.value),
-    target: parseFloat(targetInput.value)
+  savePrefBtn.onclick = () => {
+    const prefsToSave = {
+      tmin: parseFloat(tminInput.value),
+      tmax: parseFloat(tmaxInput.value),
+      wmax: parseFloat(wmaxInput.value),
+      target: parseFloat(targetInput.value)
+    };
+    fetch('/prefs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(prefsToSave)
+    })
+    .then(r => r.ok ? r.json() : Promise.reject('Save prefs failed'))
+    .then(() => { showMessage('Preferences saved!', false, 'prefs-msg-container'); currentPrefs = prefsToSave; })
+    .catch(err => { showMessage('Error saving preferences.', true, 'prefs-msg-container'); });
   };
-  fetch('/prefs', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(prefsToSave)
-  })
-  .then(r => r.ok ? r.json() : r.text().then(text => Promise.reject(`Save prefs failed: ${r.status} ${text}`)))
-  .then(() => { msgDiv.textContent = 'Preferences saved!'; currentPrefs = prefsToSave; })
-  .catch(err => { console.error("Error saving prefs:", err); msgDiv.textContent = `Error: ${err.message || err}`;});
-};
 
-// --- Initialize ---
-initializeApp();
+  function initializeApp() {
+    showLoading("Initializing...");
+    Promise.all([
+      fetch('/prefs').then(r => r.json()),
+      fetch('/status').then(r => r.json())
+    ])
+    .then(([prefsData, statusData]) => {
+      currentPrefs = prefsData;
+      zipsInput.value = prefsData.zip_codes || '';
+      tminInput.value = prefsData.tmin;
+      tmaxInput.value = prefsData.tmax;
+      wmaxInput.value = prefsData.wmax;
+      targetInput.value = prefsData.target;
 
+      if (statusData.ready) {
+        isGraphDataReady = true;
+        updateProgressBar(statusData.done_edge_pct);
+                  updateMileageStats(statusData.total_done_length_m, statusData.total_graph_length_m);
+          fetchGraphData().then(() => {
+            console.log("Ready to plan routes.");
+            refreshWeather();
+          });
+        } else if (prefsData.zip_codes && prefsData.zip_codes.trim() !== '') {
+          pollStatus();
+        } else {
+          console.log("Welcome! Enter Zip Codes and click Load Roads.");
+        }
+      })
+      .catch(error => {
+        console.error("Error initializing app:", error);
+      });
+  }
+
+  initializeApp();
+});
 </script>
 </body>
 </html>

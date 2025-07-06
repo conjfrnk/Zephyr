@@ -334,7 +334,7 @@ def fetch_graph_async(zips_list):
 
 
 # ── routing helpers ---------------------------------------------------------
-def weight_factory(avoid_hills, prioritize_new_roads=True, temp_avoid_node_pairs=None):
+def weight_factory(avoid_hills, prioritize_new_roads=True, temp_avoid_node_pairs=None, route_variety_factor=1.0):
     with app.app_context():
         globally_done_set = {(e.u, e.v, e.key) for e in DoneEdge.query.all()}
 
@@ -344,16 +344,28 @@ def weight_factory(avoid_hills, prioritize_new_roads=True, temp_avoid_node_pairs
         k = edge_data.get('_edge_key_')
         weight = float(edge_data.get("length", 1.0))
 
+        # Avoid repeating segments from current path
         if tuple(sorted((u, v))) in current_path_avoid_node_pairs:
-            weight *= 5000  
+            weight *= 1000  # Reduced from 5000 for better route variety
 
-        if prioritize_new_roads:
-            if k is not None and (u, v, k) in globally_done_set:
-                weight *= 20000 # Increased penalty
+        # Prioritize new roads with more nuanced weighting
+        if prioritize_new_roads and k is not None:
+            if (u, v, k) in globally_done_set:
+                # More sophisticated penalty based on how recently the road was done
+                weight *= 15  # Reduced from 20000 for better balance
+            else:
+                # Bonus for new roads, but not too aggressive
+                weight *= 0.8
 
+        # Enhanced hill avoidance with gradual penalty
         if avoid_hills:
             grade = abs(float(edge_data.get("grade_abs", edge_data.get("grade", 0.0))))
-            weight *= (1 + grade * 10)
+            # More gradual penalty curve
+            grade_penalty = 1 + (grade * 5)  # Reduced from 10
+            weight *= grade_penalty
+
+        # Add variety factor to encourage different route types
+        weight *= route_variety_factor
 
         return max(weight, 0.0001)
     return cost_func
@@ -447,119 +459,461 @@ def path_geojson(path_nodes, graph_ref):
         },
     }
 
-def auto_path(lat, lon, target_miles, avoid_hills, num_intermediate_samples=30, top_n_paths_to_return=5):
+def auto_path(lat, lon, target_miles, avoid_hills, num_intermediate_samples=50, top_n_paths_to_return=8):
+    """
+    Enhanced route generation with multiple strategies and better optimization
+    """
     if not G or G.number_of_nodes() == 0:
-        print("auto_path (loop): Graph not ready or empty.")
+        print("auto_path: Graph not ready or empty.")
         return None
+    
     try:
         start_node = ox.nearest_nodes(G, X=lon, Y=lat)
     except Exception as e:
-        print(f"auto_path (loop): Error finding nearest node for ({lat},{lon}): {e}")
+        print(f"auto_path: Error finding nearest node for ({lat},{lon}): {e}")
         return None
 
     target_m = target_miles * 1609.34
-    print(f"auto_path (loop): Start {start_node}, Target: {target_m:.0f}m")
+    print(f"auto_path: Start {start_node}, Target: {target_m:.0f}m")
 
     start_node_data = G.nodes[start_node]
     start_node_y, start_node_x = start_node_data['y'], start_node_data['x']
+    
+    # Create a subgraph for faster processing
+    radius_m = target_m * 0.75  # More generous radius
+    subgraph_nodes = [n for n, d in G.nodes(data=True) if dist_m(start_node_y, start_node_x, d['y'], d['x']) < radius_m]
+    if start_node not in subgraph_nodes:
+        subgraph_nodes.append(start_node)
+    
+    if len(subgraph_nodes) < 30: # If area is sparse, use the whole graph
+        H = G
+        print(f"Using full graph ({G.number_of_nodes()} nodes) due to sparse area.")
+    else:
+        H = G.subgraph(subgraph_nodes).copy()
+        print(f"Created subgraph with {H.number_of_nodes()} nodes and {H.number_of_edges()} edges.")
+
 
     with app.app_context(): 
         globally_done_set_for_loops = {(e.u, e.v, e.key) for e in DoneEdge.query.all()}
     
-    leg1_weight_func = weight_factory(avoid_hills=avoid_hills, prioritize_new_roads=True, temp_avoid_node_pairs=None)
+    # Multiple route generation strategies, now operating on subgraph H
+    all_candidates = []
     
-    half_target_m = target_m / 2.0
-    min_intermediate_radius_m = max(250.0, half_target_m * 0.25) 
-    max_intermediate_radius_m = max(750.0, half_target_m * 0.75)
+    # Strategy 1: Enhanced two-leg loops
+    candidates_1 = _generate_two_leg_loops(H, start_node, target_m, avoid_hills, globally_done_set_for_loops, 
+                                          num_intermediate_samples, start_node_y, start_node_x)
+    all_candidates.extend(candidates_1)
     
-    intermediate_nodes = []
-    for node_id, node_data in G.nodes(data=True):
-        if node_id == start_node: continue
-        d = dist_m(start_node_y, start_node_x, node_data['y'], node_data['x'])
-        if min_intermediate_radius_m <= d <= max_intermediate_radius_m:
-            intermediate_nodes.append(node_id)
+    # Strategy 2: Multi-point routes
+    candidates_2 = _generate_multi_point_routes(H, start_node, target_m, avoid_hills, globally_done_set_for_loops,
+                                              start_node_y, start_node_x)
+    all_candidates.extend(candidates_2)
     
-    if len(intermediate_nodes) > num_intermediate_samples:
-        intermediate_nodes = random.sample(intermediate_nodes, num_intermediate_samples)
+    # Strategy 3: Out-and-back with different return paths
+    candidates_3 = _generate_out_and_back_routes(H, start_node, target_m, avoid_hills, globally_done_set_for_loops,
+                                                start_node_y, start_node_x)
+    all_candidates.extend(candidates_3)
     
-    if not intermediate_nodes:
-        fallback_radius = max(500.0, half_target_m * 0.6) 
-        for node_id, node_data in G.nodes(data=True):
+    # Strategy 4: Zigzag routes for efficient parallel street coverage
+    candidates_4 = _generate_zigzag_routes(H, start_node, target_m, avoid_hills, globally_done_set_for_loops,
+                                          start_node_y, start_node_x)
+    all_candidates.extend(candidates_4)
+    
+    if not all_candidates:
+        print("auto_path: No candidate routes found with any strategy.")
+        return None
+
+    # Enhanced scoring and filtering
+    scored_candidates = _score_and_filter_candidates(all_candidates, target_m)
+    
+    if not scored_candidates:
+        print("auto_path: No routes passed scoring criteria.")
+        return None
+
+    # Return top candidates
+    selected_paths_nodes = [p['path'] for p in scored_candidates[:top_n_paths_to_return]]
+    
+    if selected_paths_nodes:
+        best_p_details = scored_candidates[0]
+        print(f"auto_path: Returning {len(selected_paths_nodes)} candidate paths. Top choice: newness {best_p_details['percentage_new']:.1f}%, dist {best_p_details['distance']:.0f}m.")
+    else: 
+        print("auto_path: No routes selected.")
+        
+    return selected_paths_nodes if selected_paths_nodes else None
+
+def _generate_two_leg_loops(graph, start_node, target_m, avoid_hills, globally_done_set, num_samples, start_y, start_x):
+    """Enhanced two-leg loop generation with better intermediate point selection"""
+    candidates = []
+    
+    # Multiple radius ranges for better coverage
+    radius_ranges = [
+        (target_m * 0.3, target_m * 0.7),  # Close range
+        (target_m * 0.4, target_m * 0.8),  # Medium range  
+        (target_m * 0.5, target_m * 0.9),  # Far range
+    ]
+    
+    for min_radius, max_radius in radius_ranges:
+        intermediate_nodes = []
+        for node_id, node_data in graph.nodes(data=True):
             if node_id == start_node: continue
-            if node_id in intermediate_nodes: continue 
-            if dist_m(start_node_y, start_node_x, node_data['y'], node_data['x']) <= fallback_radius:
+            d = dist_m(start_y, start_x, node_data['y'], node_data['x'])
+            if min_radius <= d <= max_radius:
                 intermediate_nodes.append(node_id)
-        if len(intermediate_nodes) > int(num_intermediate_samples * 0.8) : 
-             intermediate_nodes = random.sample(intermediate_nodes, int(num_intermediate_samples * 0.8))
-
-    print(f"auto_path (loop): Testing {len(intermediate_nodes)} intermediate nodes.")
-    if not intermediate_nodes: return None
-
-    candidate_loop_paths_details = []
+        
+        if len(intermediate_nodes) > num_samples // len(radius_ranges):
+            intermediate_nodes = random.sample(intermediate_nodes, num_samples // len(radius_ranges))
 
     for intermediate_node in intermediate_nodes:
         try:
-            path1_nodes = nx.shortest_path(G, source=start_node, target=intermediate_node, weight=leg1_weight_func)
+            # First leg with standard weighting
+            leg1_weight_func = weight_factory(avoid_hills=avoid_hills, prioritize_new_roads=True)
+            path1_nodes = nx.shortest_path(graph, source=start_node, target=intermediate_node, weight=leg1_weight_func)
             if len(path1_nodes) < 2: continue
 
-            path1_node_segments_to_avoid = {tuple(sorted((path1_nodes[i], path1_nodes[i+1]))) for i in range(len(path1_nodes)-1)}
-            
-            leg2_weight_func = weight_factory(avoid_hills=avoid_hills, prioritize_new_roads=True, temp_avoid_node_pairs=path1_node_segments_to_avoid)
-            path2_nodes = nx.shortest_path(G, source=intermediate_node, target=start_node, weight=leg2_weight_func)
+            # Second leg avoiding first leg segments
+            path1_segments = {tuple(sorted((path1_nodes[i], path1_nodes[i+1]))) for i in range(len(path1_nodes)-1)}
+            leg2_weight_func = weight_factory(avoid_hills=avoid_hills, prioritize_new_roads=True, temp_avoid_node_pairs=path1_segments)
+            path2_nodes = nx.shortest_path(graph, source=intermediate_node, target=start_node, weight=leg2_weight_func)
             if len(path2_nodes) < 2: continue
             
             loop_path_nodes = path1_nodes[:-1] + path2_nodes 
-            if len(loop_path_nodes) < 3 : continue
+            if len(loop_path_nodes) < 3: continue
 
-            path_details = _calculate_path_details(loop_path_nodes, G, globally_done_set_for_loops)
+            path_details = _calculate_path_details(loop_path_nodes, graph, globally_done_set)
             if not path_details.get("valid"): continue
             
-            # Broad initial filter for loops
-            if target_m * 0.5 <= path_details['distance_m'] <= target_m * 1.75: 
-                candidate_loop_paths_details.append({
+            # More flexible distance filtering
+            if target_m * 0.4 <= path_details['distance_m'] <= target_m * 1.8: 
+                candidates.append({
                     'path': loop_path_nodes, 
                     'distance': path_details['distance_m'],
-                    'percentage_new': path_details['percentage_new_distance']
+                    'percentage_new': path_details['percentage_new_distance'],
+                    'strategy': 'two_leg'
                 })
         except (nx.NetworkXNoPath, nx.NodeNotFound): continue
         except Exception as e: 
-            print(f"Error constructing loop via intermediate {intermediate_node}: {type(e).__name__} {e}") # Print type of error
+            print(f"Error in two-leg loop via {intermediate_node}: {e}")
             continue
     
-    if not candidate_loop_paths_details:
-        print("auto_path (loop): No candidate loops constructed after iterating intermediates.")
+    return candidates
+
+def _generate_multi_point_routes(graph, start_node, target_m, avoid_hills, globally_done_set, start_y, start_x):
+    """Generate routes with 3-4 points for more variety"""
+    candidates = []
+    
+    if not graph:
+        return candidates
+    
+    # Find potential waypoints at different distances
+    waypoint_candidates = []
+    for node_id, node_data in graph.nodes(data=True):
+        if node_id == start_node: continue
+        d = dist_m(start_y, start_x, node_data['y'], node_data['x'])
+        if target_m * 0.2 <= d <= target_m * 0.6:
+            waypoint_candidates.append(node_id)
+    
+    if len(waypoint_candidates) > 20:
+        waypoint_candidates = random.sample(waypoint_candidates, 20)
+    
+    for waypoint in waypoint_candidates:
+        try:
+            # Create 3-point route: start -> waypoint -> different_point -> start
+            leg1_weight = weight_factory(avoid_hills=avoid_hills, prioritize_new_roads=True)
+            path1 = nx.shortest_path(graph, source=start_node, target=waypoint, weight=leg1_weight)
+            if len(path1) < 2: continue
+            
+            # Find a different return point
+            path1_segments = {tuple(sorted((path1[i], path1[i+1]))) for i in range(len(path1)-1)}
+            for return_point in waypoint_candidates[:10]:  # Try first 10 as return points
+                if return_point == waypoint: continue
+                
+                try:
+                    leg2_weight = weight_factory(avoid_hills=avoid_hills, prioritize_new_roads=True, temp_avoid_node_pairs=path1_segments)
+                    path2 = nx.shortest_path(graph, source=waypoint, target=return_point, weight=leg2_weight)
+                    if len(path2) < 2: continue
+                    
+                    # Combine segments and avoid both previous paths
+                    all_segments = path1_segments | {tuple(sorted((path2[i], path2[i+1]))) for i in range(len(path2)-1)}
+                    leg3_weight = weight_factory(avoid_hills=avoid_hills, prioritize_new_roads=True, temp_avoid_node_pairs=all_segments)
+                    path3 = nx.shortest_path(graph, source=return_point, target=start_node, weight=leg3_weight)
+                    if len(path3) < 2: continue
+                    
+                    multi_path = path1[:-1] + path2[:-1] + path3
+                    if len(multi_path) < 4: continue
+                    
+                    path_details = _calculate_path_details(multi_path, graph, globally_done_set)
+                    if not path_details.get("valid"): continue
+                    
+                    if target_m * 0.5 <= path_details['distance_m'] <= target_m * 1.6:
+                        candidates.append({
+                            'path': multi_path,
+                            'distance': path_details['distance_m'],
+                            'percentage_new': path_details['percentage_new_distance'],
+                            'strategy': 'multi_point'
+                        })
+                        break  # Found a good route for this waypoint
+                        
+                except (nx.NetworkXNoPath, nx.NodeNotFound): continue
+                
+        except (nx.NetworkXNoPath, nx.NodeNotFound): continue
+        except Exception as e:
+            print(f"Error in multi-point route via {waypoint}: {e}")
+            continue
+    
+    return candidates
+
+def _generate_out_and_back_routes(graph, start_node, target_m, avoid_hills, globally_done_set, start_y, start_x):
+    """Generate out-and-back routes with different return paths"""
+    candidates = []
+    
+    if not graph:
+        return candidates
+    
+    # Find potential turnaround points
+    turnaround_candidates = []
+    for node_id, node_data in graph.nodes(data=True):
+        if node_id == start_node: continue
+        d = dist_m(start_y, start_x, node_data['y'], node_data['x'])
+        if target_m * 0.3 <= d <= target_m * 0.7:
+            turnaround_candidates.append(node_id)
+    
+    if len(turnaround_candidates) > 15:
+        turnaround_candidates = random.sample(turnaround_candidates, 15)
+    
+    for turnaround in turnaround_candidates:
+        try:
+            # Outbound leg
+            out_weight = weight_factory(avoid_hills=avoid_hills, prioritize_new_roads=True)
+            out_path = nx.shortest_path(graph, source=start_node, target=turnaround, weight=out_weight)
+            if len(out_path) < 2: continue
+            
+            # Return leg with different path
+            out_segments = {tuple(sorted((out_path[i], out_path[i+1]))) for i in range(len(out_path)-1)}
+            back_weight = weight_factory(avoid_hills=avoid_hills, prioritize_new_roads=True, temp_avoid_node_pairs=out_segments)
+            back_path = nx.shortest_path(graph, source=turnaround, target=start_node, weight=back_weight)
+            if len(back_path) < 2: continue
+            
+            out_and_back = out_path[:-1] + back_path
+            if len(out_and_back) < 3: continue
+            
+            path_details = _calculate_path_details(out_and_back, graph, globally_done_set)
+            if not path_details.get("valid"): continue
+            
+            if target_m * 0.4 <= path_details['distance_m'] <= target_m * 1.7:
+                candidates.append({
+                    'path': out_and_back,
+                    'distance': path_details['distance_m'],
+                    'percentage_new': path_details['percentage_new_distance'],
+                    'strategy': 'out_and_back'
+                })
+                
+        except (nx.NetworkXNoPath, nx.NodeNotFound): continue
+        except Exception as e:
+            print(f"Error in out-and-back route via {turnaround}: {e}")
+            continue
+    
+    return candidates
+
+def _generate_zigzag_routes(graph, start_node, target_m, avoid_hills, globally_done_set, start_y, start_x):
+    """Generate zigzag routes that efficiently cover parallel streets"""
+    candidates = []
+    
+    if not graph:
+        return candidates
+    
+    # Find streets that run roughly parallel (similar orientation)
+    def get_street_orientation(node1, node2):
+        """Calculate the orientation angle of a street segment"""
+        dx = node2['x'] - node1['x']
+        dy = node2['y'] - node1['y']
+        return math.atan2(dy, dx)
+    
+    # Group streets by orientation (within 15 degrees)
+    orientation_groups = {}
+    for u, v, data in graph.edges(data=True):
+        if u in graph.nodes and v in graph.nodes:
+            u_data = graph.nodes[u]
+            v_data = graph.nodes[v]
+            orientation = get_street_orientation(u_data, v_data)
+            # Normalize to 0-180 degrees
+            orientation = abs(orientation) % math.pi
+            # Group into 15-degree bins
+            bin_key = int(orientation * 180 / math.pi / 15)
+            if bin_key not in orientation_groups:
+                orientation_groups[bin_key] = []
+            orientation_groups[bin_key].append((u, v, data))
+    
+    # Find the most common orientations (likely main streets)
+    sorted_groups = sorted(orientation_groups.items(), key=lambda x: len(x[1]), reverse=True)
+    
+    for group_id, edges in sorted_groups[:3]:  # Top 3 orientations
+        if len(edges) < 3:  # Need at least 3 parallel streets
+            continue
+            
+        # Sort edges by distance from start
+        edges_with_dist = []
+        for u, v, data in edges:
+            mid_lat = (graph.nodes[u]['y'] + graph.nodes[v]['y']) / 2
+            mid_lon = (graph.nodes[u]['x'] + graph.nodes[v]['x']) / 2
+            dist = dist_m(start_y, start_x, mid_lat, mid_lon)
+            edges_with_dist.append((u, v, data, dist))
+        
+        edges_with_dist.sort(key=lambda x: x[3])
+        
+        # Create zigzag route using these parallel streets
+        zigzag_path = _create_zigzag_from_parallel_streets(graph, start_node, edges_with_dist, target_m, avoid_hills, globally_done_set)
+        
+        if zigzag_path and len(zigzag_path) > 3:
+            path_details = _calculate_path_details(zigzag_path, graph, globally_done_set)
+            if path_details.get("valid") and target_m * 0.4 <= path_details['distance_m'] <= target_m * 1.8:
+                candidates.append({
+                    'path': zigzag_path,
+                    'distance': path_details['distance_m'],
+                    'percentage_new': path_details['percentage_new_distance'],
+                    'strategy': 'zigzag'
+                })
+    
+    return candidates
+
+def _create_zigzag_from_parallel_streets(graph, start_node, parallel_edges, target_m, avoid_hills, globally_done_set):
+    """Create a zigzag route using parallel streets"""
+    if not parallel_edges:
         return None
 
-    # Sort candidates: primary by newness (desc), secondary by distance to target (asc)
-    candidate_loop_paths_details.sort(key=lambda p: (-p['percentage_new'], abs(p['distance'] - target_m)))
+    # Find the closest parallel street to start
+    closest_edge = min(parallel_edges, key=lambda x: x[3])
+    u, v, data, dist = closest_edge
     
-    # Stricter final filter for distance for the "ideal" paths
-    final_candidates_ideal_distance = [
-        p for p in candidate_loop_paths_details
-        if p['distance'] >= target_m * 0.75 and p['distance'] <= target_m * 1.25 
+    # Find path to the closest parallel street
+    weight_func = weight_factory(avoid_hills=avoid_hills, prioritize_new_roads=True)
+    try:
+        path_to_parallel = nx.shortest_path(graph, source=start_node, target=u, weight=weight_func)
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        try:
+            path_to_parallel = nx.shortest_path(graph, source=start_node, target=v, weight=weight_func)
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            return None
+    
+    if len(path_to_parallel) < 2:
+        return None
+    
+    # Start building zigzag path
+    zigzag_path = path_to_parallel[:-1]  # Don't include the endpoint yet
+    
+    current_node = path_to_parallel[-1]
+    current_distance = 0
+    for i in range(len(zigzag_path)-1):
+        if graph.has_edge(zigzag_path[i], zigzag_path[i+1]):
+            # Get the edge data safely - handle multiple edges between same nodes
+            edges = graph.get_edge_data(zigzag_path[i], zigzag_path[i+1])
+            if edges:
+                # Get the first edge (or any edge) - they should have similar lengths
+                edge_key = list(edges.keys())[0]
+                edge_data = edges[edge_key]
+                if isinstance(edge_data, dict):
+                    current_distance += edge_data.get('length', 0)
+    
+    # Sort parallel edges by distance from start
+    sorted_edges = sorted(parallel_edges, key=lambda x: x[3])
+    
+    # Create zigzag pattern
+    for i, (u, v, data, dist) in enumerate(sorted_edges[:min(5, len(sorted_edges))]):  # Use up to 5 parallel streets
+        if current_distance > target_m * 0.8:  # Stop if we're getting close to target
+            break
+            
+        # Find path to this parallel street
+        try:
+            path_to_next = nx.shortest_path(graph, source=current_node, target=u, weight=weight_func)
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            try:
+                path_to_next = nx.shortest_path(graph, source=current_node, target=v, weight=weight_func)
+            except (nx.NetworkXNoPath, nx.NodeNotFound):
+                continue
+        
+        if len(path_to_next) < 2:
+            continue
+        
+        # Add the connecting path (excluding the endpoint to avoid duplication)
+        zigzag_path.extend(path_to_next[:-1])
+        
+        # Add the parallel street itself
+        zigzag_path.append(u)
+        zigzag_path.append(v)
+        
+        # Update current position and distance
+        current_node = v
+        # Add distance from connecting path
+        for j in range(len(path_to_next)-1):
+            if graph.has_edge(path_to_next[j], path_to_next[j+1]):
+                edges = graph.get_edge_data(path_to_next[j], path_to_next[j+1])
+                if edges:
+                    edge_key = list(edges.keys())[0]
+                    edge_data = edges[edge_key]
+                    if isinstance(edge_data, dict):
+                        current_distance += edge_data.get('length', 0)
+        # Add distance from the parallel street itself
+        current_distance += data.get('length', 0)
+    
+    # Find path back to start
+    try:
+        path_back = nx.shortest_path(graph, source=current_node, target=start_node, weight=weight_func)
+        zigzag_path.extend(path_back)
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        # If we can't get back to start, just return what we have
+        pass
+    
+    return zigzag_path if len(zigzag_path) > 3 else None
+
+def _score_and_filter_candidates(candidates, target_m):
+    """Enhanced scoring system for route selection"""
+    if not candidates:
+        return []
+    
+    # Calculate scores for each candidate
+    scored_candidates = []
+    for candidate in candidates:
+        distance = candidate['distance']
+        percentage_new = candidate['percentage_new']
+        strategy = candidate.get('strategy', 'unknown')
+        
+        # Distance score (closer to target is better)
+        distance_score = 1.0 / (1.0 + abs(distance - target_m) / target_m)
+        
+        # Newness score (higher is better)
+        newness_score = percentage_new / 100.0
+        
+        # Strategy bonus (prefer variety and efficiency)
+        strategy_bonus = {
+            'two_leg': 1.0,
+            'multi_point': 1.1,  # Slight preference for complexity
+            'out_and_back': 1.05,
+            'zigzag': 1.2  # Strong preference for zigzag routes (efficient exploration)
+        }.get(strategy, 1.0)
+        
+        # Combined score
+        total_score = (distance_score * 0.4 + newness_score * 0.6) * strategy_bonus
+        
+        scored_candidates.append({
+            **candidate,
+            'score': total_score,
+            'distance_score': distance_score,
+            'newness_score': newness_score
+        })
+    
+    # Sort by total score
+    scored_candidates.sort(key=lambda x: x['score'], reverse=True)
+    
+    # Filter to reasonable distance range
+    final_candidates = [
+        c for c in scored_candidates
+        if target_m * 0.6 <= c['distance'] <= target_m * 1.4 # Loosened range
     ]
     
-    top_n_to_return_list = []
-    if final_candidates_ideal_distance:
-        top_n_to_return_list = final_candidates_ideal_distance[:top_n_paths_to_return]
-        # print(f"auto_path (loop): Selected {len(top_n_to_return_list)} paths from ideal distance range, prioritized by newness.")
-    elif candidate_loop_paths_details: 
-        top_n_to_return_list = candidate_loop_paths_details[:top_n_paths_to_return]
-        # print(f"auto_path (loop): No loops in ideal distance range, returning best {len(top_n_to_return_list)} overall (newness prioritized).")
-    
-    if not top_n_to_return_list:
-        print("auto_path (loop): No paths left after all filtering.")
-        return None
+    if not final_candidates and scored_candidates:
+        print("No routes in ideal distance range, returning best available options.")
+        return scored_candidates
 
-    selected_paths_nodes = [p['path'] for p in top_n_to_return_list]
-    
-    if selected_paths_nodes:
-        best_p_details = top_n_to_return_list[0]
-        print(f"auto_path (loop): Returning {len(selected_paths_nodes)} candidate paths. Top choice: newness {best_p_details['percentage_new']:.1f}%, dist {best_p_details['distance']:.0f}m.")
-    else: 
-        print("auto_path (loop): No loop path selected (empty final_candidates).")
-        
-    return selected_paths_nodes if selected_paths_nodes else None
+    return final_candidates
 
 
 # ── routes ------------------------------------------------------------------
@@ -669,11 +1023,32 @@ def plan_auto():
     current_prefs_obj = get_pref() 
     w_data = wx(lat, lon)
     target_miles_effective = current_prefs_obj.target_miles
-    if (w_data["temp_f"] < current_prefs_obj.ideal_min_temp_f or
-        w_data["temp_f"] > current_prefs_obj.ideal_max_temp_f or
-        w_data["wind_mph"] > current_prefs_obj.max_wind_mph):
-        target_miles_effective *= 0.5
-        if target_miles_effective < 0.5 : target_miles_effective = 0.5 
+    
+    # More nuanced weather-based distance adjustment
+    weather_factor = 1.0
+    temp_factor = 1.0
+    wind_factor = 1.0
+    
+    # Temperature adjustment (gradual)
+    if w_data["temp_f"] < current_prefs_obj.ideal_min_temp_f:
+        temp_diff = current_prefs_obj.ideal_min_temp_f - w_data["temp_f"]
+        temp_factor = max(0.7, 1.0 - (temp_diff * 0.02))  # Gradual reduction
+    elif w_data["temp_f"] > current_prefs_obj.ideal_max_temp_f:
+        temp_diff = w_data["temp_f"] - current_prefs_obj.ideal_max_temp_f
+        temp_factor = max(0.7, 1.0 - (temp_diff * 0.02))  # Gradual reduction
+    
+    # Wind adjustment (gradual)
+    if w_data["wind_mph"] > current_prefs_obj.max_wind_mph:
+        wind_diff = w_data["wind_mph"] - current_prefs_obj.max_wind_mph
+        wind_factor = max(0.6, 1.0 - (wind_diff * 0.03))  # Gradual reduction
+    
+    # Combined weather factor
+    weather_factor = min(temp_factor, wind_factor)
+    target_miles_effective *= weather_factor
+    
+    # Ensure minimum reasonable distance
+    if target_miles_effective < 1.0:
+        target_miles_effective = 1.0 
     
     list_of_path_nodes = auto_path(lat, lon, target_miles_effective, avoid)
     
