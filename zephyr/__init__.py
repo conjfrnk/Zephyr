@@ -9,7 +9,6 @@ import os
 from flask import Flask
 
 from .models import db, Pref
-from .graph import fetch_graph_async
 
 
 def create_app():
@@ -39,14 +38,5 @@ def create_app():
     from .routes.views import views
     app.register_blueprint(api)
     app.register_blueprint(views)
-
-    # Auto-load graph for saved zip codes
-    with app.app_context():
-        initial_prefs = Pref.query.first()
-        if initial_prefs and initial_prefs.zip_codes:
-            zs = [s.strip() for s in initial_prefs.zip_codes.split(',') if s.strip()]
-            if zs:
-                print(f"Autoloading graph for zips: {zs}")
-                fetch_graph_async(zs, app)
 
     return app
