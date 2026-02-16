@@ -171,34 +171,6 @@ Resources:
         - !Ref EFSSecurityGroup
 
   # ──────────────────────────────────────────────
-  # ECR Repository
-  # ──────────────────────────────────────────────
-  ECRRepository:
-    Type: AWS::ECR::Repository
-    Properties:
-      RepositoryName: zephyr
-      ImageScanningConfiguration:
-        ScanOnPush: true
-      LifecyclePolicy:
-        LifecyclePolicyText: |
-          {
-            "rules": [
-              {
-                "rulePriority": 1,
-                "description": "Keep only 10 most recent images",
-                "selection": {
-                  "tagStatus": "any",
-                  "countType": "imageCountMoreThan",
-                  "countNumber": 10
-                },
-                "action": {
-                  "type": "expire"
-                }
-              }
-            ]
-          }
-
-  # ──────────────────────────────────────────────
   # CloudWatch Logs
   # ──────────────────────────────────────────────
   LogGroup:
@@ -420,7 +392,6 @@ Resources:
       MaxCapacity: 3
       MinCapacity: 1
       ResourceId: !Sub service/${ECSCluster}/${ECSService.Name}
-      RoleARN: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
       ScalableDimension: ecs:service:DesiredCount
       ServiceNamespace: ecs
 
@@ -443,10 +414,6 @@ Outputs:
   ServiceURL:
     Description: Application URL
     Value: !Sub https://${DomainName}
-
-  ECRRepositoryURI:
-    Description: ECR Repository URI
-    Value: !GetAtt ECRRepository.RepositoryUri
 
   ECSClusterName:
     Description: ECS Cluster Name
