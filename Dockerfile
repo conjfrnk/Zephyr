@@ -1,5 +1,4 @@
-# Stage 1: Build dependencies
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
@@ -8,6 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgeos-dev \
     libproj-dev \
     libspatialindex-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -15,21 +15,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Stage 2: Production image
-FROM python:3.12-slim
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgdal32 \
-    libgeos-c1v5 \
-    libproj25 \
-    libspatialindex6 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+# Remove build-time compilers to reduce image size
+RUN apt-get purge -y --auto-remove gcc g++
 
 COPY . .
 
@@ -40,7 +27,7 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 CMD ["gunicorn", "zephyr:create_app()", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120"]
