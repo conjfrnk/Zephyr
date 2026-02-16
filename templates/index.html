@@ -820,7 +820,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
   /* ── Map setup ──────────────────────────────────────── */
 
-  var map = L.map('map').setView([40.44, -79.99], 13);
+  var map = L.map('map').setView([40.7128, -73.9857], 13);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
@@ -865,6 +865,44 @@ document.addEventListener("DOMContentLoaded", function() {
   var currentPrefs = {};
   var currentRunId = null;
   var isGraphDataReady = false;
+  var cachedGraphZips = null;
+  var cachedGraphGeoJSON = null;
+  var cachedWeather = null;
+  var cachedWeatherTime = 0;
+  var WEATHER_CACHE_MS = 5 * 60 * 1000;
+
+  /* ── localStorage helpers ────────────────────────────── */
+
+  var LS_KEY = 'zephyr_prefs';
+  var DEFAULTS = {
+    tmin: 50,
+    tmax: 68,
+    wmax: 15,
+    target: 5.0,
+    zip_codes: '10001',
+    avoid_hills: false
+  };
+
+  function loadPrefs() {
+    try {
+      var stored = localStorage.getItem(LS_KEY);
+      if (stored) {
+        var parsed = JSON.parse(stored);
+        return Object.assign({}, DEFAULTS, parsed);
+      }
+    } catch (e) {
+      console.error('Error reading localStorage:', e);
+    }
+    return Object.assign({}, DEFAULTS);
+  }
+
+  function savePrefs(prefs) {
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(prefs));
+    } catch (e) {
+      console.error('Error writing localStorage:', e);
+    }
+  }
 
   /* ── Mobile sidebar toggle ──────────────────────────── */
 
@@ -972,28 +1010,39 @@ document.addEventListener("DOMContentLoaded", function() {
 
   var weatherDebounceTimer = null;
 
+  function renderWeather(w) {
+    weatherDiv.style.display = 'block';
+    weatherDiv.textContent = '';
+    var tempDiv = document.createElement('div');
+    tempDiv.className = 'weather-temp';
+    tempDiv.textContent = w.temp_f + '\u00B0F';
+    var descDiv = document.createElement('div');
+    descDiv.className = 'weather-desc';
+    descDiv.textContent = w.short;
+    var windDiv = document.createElement('div');
+    windDiv.className = 'weather-wind';
+    windDiv.textContent = w.wind_mph + ' mph wind';
+    weatherDiv.appendChild(tempDiv);
+    weatherDiv.appendChild(descDiv);
+    weatherDiv.appendChild(windDiv);
+  }
+
   function refreshWeather() {
     if (!map) return;
     if (weatherDebounceTimer) clearTimeout(weatherDebounceTimer);
     weatherDebounceTimer = setTimeout(function() {
+      var now = Date.now();
+      if (cachedWeather && (now - cachedWeatherTime) < WEATHER_CACHE_MS) {
+        renderWeather(cachedWeather);
+        return;
+      }
       var center = map.getCenter();
       fetch('/weather?lat=' + center.lat + '&lon=' + center.lng)
         .then(function(r) { return r.ok ? r.json() : Promise.reject('Weather fetch failed: ' + r.status); })
         .then(function(w) {
-          weatherDiv.style.display = 'block';
-          weatherDiv.textContent = '';
-          var tempDiv = document.createElement('div');
-          tempDiv.className = 'weather-temp';
-          tempDiv.textContent = w.temp_f + '\u00B0F';
-          var descDiv = document.createElement('div');
-          descDiv.className = 'weather-desc';
-          descDiv.textContent = w.short;
-          var windDiv = document.createElement('div');
-          windDiv.className = 'weather-wind';
-          windDiv.textContent = w.wind_mph + ' mph wind';
-          weatherDiv.appendChild(tempDiv);
-          weatherDiv.appendChild(descDiv);
-          weatherDiv.appendChild(windDiv);
+          cachedWeather = w;
+          cachedWeatherTime = Date.now();
+          renderWeather(w);
         })
         .catch(function(err) {
           console.error("Error refreshing weather:", err);
@@ -1002,7 +1051,11 @@ document.addEventListener("DOMContentLoaded", function() {
     }, 2000);
   }
 
-  map.on('moveend', refreshWeather);
+  map.on('moveend', function() {
+    cachedWeather = null;
+    cachedWeatherTime = 0;
+    refreshWeather();
+  });
 
   /* ── Progress ───────────────────────────────────────── */
 
@@ -1058,10 +1111,20 @@ document.addEventListener("DOMContentLoaded", function() {
 
   /* ── Graph data ─────────────────────────────────────── */
 
-  function fetchGraphData() {
+  function fetchGraphData(forceRefresh) {
+    var currentZips = zipsInput.value.trim();
+    if (!forceRefresh && cachedGraphGeoJSON && cachedGraphZips === currentZips) {
+      graphLayer.clearLayers().addData(cachedGraphGeoJSON);
+      if (graphLayer.getLayers().length > 0) {
+        map.fitBounds(graphLayer.getBounds(), { padding: [20, 20] });
+      }
+      return Promise.resolve();
+    }
     return fetch('/graph')
       .then(function(r) { return r.ok ? r.json() : Promise.reject('Graph fetch error'); })
       .then(function(graphGeoJSON) {
+        cachedGraphGeoJSON = graphGeoJSON;
+        cachedGraphZips = currentZips;
         graphLayer.clearLayers().addData(graphGeoJSON);
         if (graphLayer.getLayers().length > 0) {
           map.fitBounds(graphLayer.getBounds(), { padding: [20, 20] });
@@ -1080,6 +1143,11 @@ document.addEventListener("DOMContentLoaded", function() {
       showMessage('Please enter zip codes.', true, 'load-msg-container');
       return;
     }
+    var prefs = loadPrefs();
+    prefs.zip_codes = zipsToLoad;
+    savePrefs(prefs);
+    cachedGraphGeoJSON = null;
+    cachedGraphZips = null;
     showLoading('Loading roads for ' + zipsToLoad + '...', 'load-msg-container');
     fetch('/set_zipcodes', {
       method: 'POST',
@@ -1115,7 +1183,11 @@ document.addEventListener("DOMContentLoaded", function() {
   function planRoute(lat, lon) {
     showLoading('Planning route...', 'plan-msg-container');
     var avoidHills = avoidHillsCheck.checked;
-    fetch('/plan_auto?lat=' + lat + '&lon=' + lon + '&avoid_hills=' + avoidHills)
+    var prefs = loadPrefs();
+    var url = '/plan_auto?lat=' + lat + '&lon=' + lon + '&avoid_hills=' + avoidHills
+      + '&tmin=' + (prefs.tmin || '') + '&tmax=' + (prefs.tmax || '')
+      + '&wmax=' + (prefs.wmax || '') + '&target=' + (prefs.target || '');
+    fetch(url)
       .then(function(r) { return r.ok ? r.json() : Promise.reject('Route planning failed'); })
       .then(function(response) {
         if (!response || !response.paths || response.paths.length === 0) {
@@ -1311,6 +1383,8 @@ document.addEventListener("DOMContentLoaded", function() {
         showMessage('Run completed!', false, 'plan-msg-container');
         plannedLayer.clearLayers();
         plannedRunInfoDiv.style.display = 'none';
+        cachedGraphGeoJSON = null;
+        cachedGraphZips = null;
         pollStatus();
       } else {
         showMessage('Problem completing run: ' + (res.warning || 'Unknown error'), true, 'plan-msg-container');
@@ -1324,25 +1398,15 @@ document.addEventListener("DOMContentLoaded", function() {
   /* ── Preferences ────────────────────────────────────── */
 
   savePrefBtn.onclick = function() {
-    var prefsToSave = {
-      tmin: parseFloat(tminInput.value),
-      tmax: parseFloat(tmaxInput.value),
-      wmax: parseFloat(wmaxInput.value),
-      target: parseFloat(targetInput.value)
-    };
-    fetch('/prefs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(prefsToSave)
-    })
-    .then(function(r) { return r.ok ? r.json() : Promise.reject('Save prefs failed'); })
-    .then(function() {
-      showMessage('Preferences saved!', false, 'prefs-msg-container');
-      currentPrefs = prefsToSave;
-    })
-    .catch(function(err) {
-      showMessage('Error saving preferences.', true, 'prefs-msg-container');
-    });
+    var prefs = loadPrefs();
+    prefs.tmin = parseFloat(tminInput.value);
+    prefs.tmax = parseFloat(tmaxInput.value);
+    prefs.wmax = parseFloat(wmaxInput.value);
+    prefs.target = parseFloat(targetInput.value);
+    prefs.avoid_hills = avoidHillsCheck.checked;
+    savePrefs(prefs);
+    currentPrefs = prefs;
+    showMessage('Preferences saved!', false, 'prefs-msg-container');
   };
 
   /* ── Initialize ─────────────────────────────────────── */
@@ -1382,40 +1446,42 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   function initializeApp() {
-    showLoading("Initializing...", 'load-msg-container');
-    Promise.all([
-      fetch('/prefs').then(function(r) { return r.json(); }),
-      fetch('/status').then(function(r) { return r.json(); })
-    ])
-    .then(function(results) {
-      var prefsData = results[0];
-      var statusData = results[1];
+    var prefsData = loadPrefs();
+    currentPrefs = prefsData;
+    zipsInput.value = prefsData.zip_codes || '';
+    tminInput.value = prefsData.tmin;
+    tmaxInput.value = prefsData.tmax;
+    wmaxInput.value = prefsData.wmax;
+    targetInput.value = prefsData.target;
+    avoidHillsCheck.checked = !!prefsData.avoid_hills;
 
-      currentPrefs = prefsData;
-      zipsInput.value = prefsData.zip_codes || '';
-      tminInput.value = prefsData.tmin;
-      tmaxInput.value = prefsData.tmax;
-      wmaxInput.value = prefsData.wmax;
-      targetInput.value = prefsData.target;
+    if (!prefsData.zip_codes || prefsData.zip_codes.trim() === '') {
+      buildEmptyState(document.getElementById('load-msg-container'));
+      refreshWeather();
+      return;
+    }
 
-      if (statusData.ready) {
-        isGraphDataReady = true;
-        updateProgressBar(statusData.done_edge_pct);
-        updateMileageStats(statusData.total_done_length_m, statusData.total_graph_length_m);
-        fetchGraphData().then(function() {
-          showMessage("Roads loaded. Ready to plan routes.", false, 'load-msg-container');
-          refreshWeather();
-        });
-      } else if (prefsData.zip_codes && prefsData.zip_codes.trim() !== '') {
-        pollStatus();
-      } else {
+    showLoading("Checking road data...", 'load-msg-container');
+    fetch('/status')
+      .then(function(r) { return r.ok ? r.json() : Promise.reject('Status fetch failed'); })
+      .then(function(statusData) {
+        if (statusData.ready) {
+          isGraphDataReady = true;
+          updateProgressBar(statusData.done_edge_pct);
+          updateMileageStats(statusData.total_done_length_m, statusData.total_graph_length_m);
+          fetchGraphData().then(function() {
+            showMessage("Roads loaded. Ready to plan routes.", false, 'load-msg-container');
+            refreshWeather();
+          });
+        } else {
+          pollStatus();
+        }
+      })
+      .catch(function(error) {
+        console.error("Error initializing app:", error);
         buildEmptyState(document.getElementById('load-msg-container'));
-      }
-    })
-    .catch(function(error) {
-      console.error("Error initializing app:", error);
-      showMessage("Failed to connect to server.", true, 'load-msg-container');
-    });
+        refreshWeather();
+      });
   }
 
   initializeApp();

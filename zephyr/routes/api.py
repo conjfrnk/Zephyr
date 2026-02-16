@@ -4,10 +4,11 @@ Copyright (C) 2025 Connor Frank
 License: GPLv3 (see LICENSE)
 """
 
+import hashlib
 import json
 
 import osmnx as ox
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, make_response
 
 from ..models import db, Run, DoneEdge, get_pref, update_pref
 from ..weather import wx
@@ -20,7 +21,9 @@ api = Blueprint("api", __name__)
 
 @api.route("/health")
 def health():
-    return jsonify({"status": "healthy"}), 200
+    resp = make_response(jsonify({"status": "healthy"}), 200)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @api.route("/prefs", methods=["GET", "POST"])
@@ -94,13 +97,15 @@ def status():
             final_zip_status[zc]["road"] = data.get("road", 0)
             final_zip_status[zc]["elev"] = data.get("elev", 0)
 
-    return jsonify({
+    resp = make_response(jsonify({
         "ready": is_graph_ready,
         "zips": final_zip_status,
         "done_edge_pct": global_done_pct,
         "total_graph_length_m": total_graph_length_m,
         "total_done_length_m": total_done_length_m,
-    })
+    }))
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 
 @api.route("/set_zipcodes", methods=["POST"])
@@ -126,7 +131,21 @@ def graph_endpoint():
         return jsonify({"type": "FeatureCollection", "features": []}), 503
     with graph_mod.LOCK:
         gj = graph_mod.ALL_EDGES_GJ
-    return jsonify(gj)
+
+    body = json.dumps(gj, separators=(",", ":"))
+    etag = hashlib.md5(body.encode()).hexdigest()
+
+    if_none_match = request.headers.get("If-None-Match")
+    if if_none_match and if_none_match.strip('"') == etag:
+        resp = make_response("", 304)
+        resp.headers["ETag"] = f'"{etag}"'
+        return resp
+
+    resp = make_response(body, 200)
+    resp.headers["Content-Type"] = "application/json"
+    resp.headers["Cache-Control"] = "public, max-age=60"
+    resp.headers["ETag"] = f'"{etag}"'
+    return resp
 
 
 @api.route("/plan_auto")
@@ -141,22 +160,26 @@ def plan_auto():
         return jsonify({"error": "Invalid lat/lon"}), 400
 
     avoid = request.args.get("avoid_hills", "false").lower() == "true"
-    current_prefs_obj = get_pref()
+    tmin = float(request.args.get("tmin", 50))
+    tmax = float(request.args.get("tmax", 68))
+    wmax = float(request.args.get("wmax", 15))
+    target = float(request.args.get("target", 5.0))
+
     w_data = wx(lat, lon)
-    target_miles_effective = current_prefs_obj.target_miles
+    target_miles_effective = target
 
     temp_factor = 1.0
     wind_factor = 1.0
 
-    if w_data["temp_f"] < current_prefs_obj.ideal_min_temp_f:
-        temp_diff = current_prefs_obj.ideal_min_temp_f - w_data["temp_f"]
+    if w_data["temp_f"] < tmin:
+        temp_diff = tmin - w_data["temp_f"]
         temp_factor = max(0.7, 1.0 - (temp_diff * 0.02))
-    elif w_data["temp_f"] > current_prefs_obj.ideal_max_temp_f:
-        temp_diff = w_data["temp_f"] - current_prefs_obj.ideal_max_temp_f
+    elif w_data["temp_f"] > tmax:
+        temp_diff = w_data["temp_f"] - tmax
         temp_factor = max(0.7, 1.0 - (temp_diff * 0.02))
 
-    if w_data["wind_mph"] > current_prefs_obj.max_wind_mph:
-        wind_diff = w_data["wind_mph"] - current_prefs_obj.max_wind_mph
+    if w_data["wind_mph"] > wmax:
+        wind_diff = w_data["wind_mph"] - wmax
         wind_factor = max(0.6, 1.0 - (wind_diff * 0.03))
 
     weather_factor = min(temp_factor, wind_factor)
@@ -326,4 +349,6 @@ def weather():
         lon = float(request.args["lon"])
     except (ValueError, TypeError, KeyError):
         return jsonify({"error": "Invalid lat/lon parameters"}), 400
-    return jsonify(wx(lat, lon))
+    resp = make_response(jsonify(wx(lat, lon)))
+    resp.headers["Cache-Control"] = "public, max-age=300"
+    return resp

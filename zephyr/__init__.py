@@ -31,7 +31,7 @@ def create_app():
     with app.app_context():
         db.create_all()
         if Pref.query.first() is None:
-            db.session.add(Pref(zip_codes="15243"))
+            db.session.add(Pref(zip_codes="10001"))
             db.session.commit()
 
     # Register blueprints
