@@ -18,589 +18,1313 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 Contact: Connor Frank <conjfrnk@gmail.com>
 -->
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Zephyr</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
 :root {
-  --primary-color: #3b82f6;
-  --primary-hover: #2563eb;
-  --secondary-color: #6b7280;
-  --light-gray: #f9fafb;
-  --medium-gray: #e5e7eb;
-  --dark-gray: #4b5563;
-  --text-color: #1f2937;
-  --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  --border-radius: 8px;
+  --primary: #0d9488;
+  --primary-hover: #0f766e;
+  --primary-light: #ccfbf1;
+  --primary-muted: #99f6e4;
+  --accent: #f59e0b;
+  --accent-hover: #d97706;
+  --surface: #ffffff;
+  --surface-alt: #f0fdfa;
+  --bg: #f0fdf4;
+  --border: #d1d5db;
+  --border-light: #e5e7eb;
+  --text: #1f2937;
+  --text-muted: #6b7280;
+  --text-light: #9ca3af;
+  --success: #16a34a;
+  --success-bg: #dcfce7;
+  --error: #dc2626;
+  --error-bg: #fef2f2;
+  --info-bg: #e0f2fe;
+  --info-text: #0369a1;
+  --completed-road: #16a34a;
+  --unexplored-road: #9ca3af;
+  --planned-route: #dc2626;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+  --sidebar-width: 380px;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --transition: 0.2s ease;
 }
 
-body,html{
-  margin:0;
-  height:100%; 
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: var(--light-gray);
-  color: var(--text-color);
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
-#map{
-  position:absolute;
-  top:0;
-  left:350px;
-  right:0;
-  bottom:0
+body, html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
 }
 
-#sidebar{
-  position:absolute;
-  top:0;
-  left:0;
-  width:350px;
-  height:100%;
-  padding:20px;
-  background:#fff;
-  box-sizing:border-box;
-  font:14px/1.4 sans-serif; 
+/* ── Layout ─────────────────────────────────────────────── */
+
+#app {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+#sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  height: 100%;
+  background: var(--surface);
+  border-right: 1px solid var(--border-light);
   overflow-y: auto;
-  box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+  overflow-x: hidden;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  z-index: 1000;
+  transition: transform 0.3s ease;
 }
+
+#map-container {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Mobile hamburger ───────────────────────────────────── */
+
+#sidebar-toggle {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 1100;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--text);
+  transition: background var(--transition);
+}
+
+#sidebar-toggle:hover {
+  background: var(--surface-alt);
+}
+
+#sidebar-toggle svg {
+  width: 22px;
+  height: 22px;
+}
+
+#sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 999;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#sidebar-overlay.visible {
+  opacity: 1;
+}
+
+/* ── Cards ──────────────────────────────────────────────── */
 
 .card {
-  background: #fff;
-  padding: 15px;
-  margin-bottom: 15px;
-  border-radius: var(--border-radius);
-  box-shadow: var(--card-shadow);
+  background: var(--surface);
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition);
 }
 
-h3 {
-  font-size: 20px;
-  margin-bottom: 10px;
-  color: var(--primary-color);
+.card:hover {
+  box-shadow: var(--shadow-md);
 }
 
-h4 {
-  font-size: 16px;
-  margin-top: 15px;
-  margin-bottom: 5px;
-  color: var(--dark-gray);
-}
-
-button {
-  margin-top:8px;
-  margin-bottom: 4px;
-  font:inherit;
-  padding: 10px 15px;
-  background-color: var(--primary-color);
-  color:white;
-  border:none;
-  border-radius:var(--border-radius);
-  cursor:pointer;
-  transition: background-color 0.2s;
-  width: 100%;
-}
-
-button:hover{
-  background-color: var(--primary-hover);
-}
-
-button:disabled{
-  background-color: #9ca3af;
-  cursor:not-allowed;
-}
-
-input[type="text"], input[type="number"]{
-  font:inherit;
-  padding: 8px;
-  border:1px solid #ccc;
-  border-radius:var(--border-radius);
-  margin-bottom:4px;
-  box-sizing: border-box;
-  width: 100%;
-}
-
-label{
-  display: block;
-  margin-bottom: 5px;
-  font-weight: 600;
-}
-
-#msg {
-  font-size:14px;
-  color: var(--dark-gray);
-  min-height: 1.5em;
-  margin-top:10px;
-  background-color: var(--medium-gray);
-  padding:10px;
-  border-radius:var(--border-radius);
-  text-align: center;
-}
-
-.progress-bar-container{
+.card-header {
   display: flex;
   align-items: center;
-  margin: 10px auto;
-  width: 100%;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
-#progress-bar-text{
-  margin-right: 10px;
-  font-size: 16px;
-  width: 60px;
-  text-align: right;
-  color: var(--dark-gray);
+.card-header svg {
+  width: 18px;
+  height: 18px;
+  color: var(--primary);
+  flex-shrink: 0;
 }
 
-.progress-bar-outer{
-  flex-grow: 1;
-  background-color: var(--medium-gray);
-  border-radius: 5px;
-  height: 22px;
-  padding: 2px;
-  border: 1px solid #ccc;
+.card-header h3,
+.card-header h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
 }
 
-#progress-bar-inner{
-  width: 0%;
-  background-color: var(--primary-color);
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.3s ease-in-out;
-  text-align: center;
+h3.brand {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--primary);
+  margin: 0 0 4px 0;
+  letter-spacing: -0.3px;
+}
+
+.brand-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ── Buttons ────────────────────────────────────────────── */
+
+button, .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 16px;
+  min-height: 44px;
+  background: var(--primary);
   color: white;
-  font-size:12px;
-  line-height:18px;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition), transform 0.1s ease, box-shadow var(--transition);
+  width: 100%;
+  text-align: center;
 }
+
+button:hover {
+  background: var(--primary-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+button:disabled {
+  background: var(--border);
+  color: var(--text-light);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+button.btn-secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+button.btn-secondary:hover {
+  background: var(--surface-alt);
+}
+
+button.btn-accent {
+  background: var(--accent);
+  color: white;
+}
+
+button.btn-accent:hover {
+  background: var(--accent-hover);
+}
+
+/* ── Inputs ─────────────────────────────────────────────── */
+
+label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+input[type="text"],
+input[type="number"] {
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  width: 100%;
+  background: var(--surface);
+  color: var(--text);
+  transition: border-color var(--transition), box-shadow var(--transition);
+  min-height: 44px;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(13,148,136,0.15);
+}
+
+.input-group {
+  margin-bottom: 8px;
+}
+
+.input-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+/* checkbox */
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text);
+  cursor: pointer;
+  min-height: 44px;
+  padding: 0 4px;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}
+
+/* ── Messages ───────────────────────────────────────────── */
+
+.message-container {
+  margin-top: 8px;
+  min-height: 0;
+  transition: all var(--transition);
+}
+
+.msg {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  animation: msgFadeIn 0.2s ease;
+}
+
+@keyframes msgFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.msg.loading {
+  background: var(--info-bg);
+  color: var(--info-text);
+}
+
+.msg.success {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.msg.error {
+  background: var(--error-bg);
+  color: var(--error);
+}
+
+/* ── Progress bar ───────────────────────────────────────── */
+
+.progress-section {
+  text-align: center;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.progress-pct {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.progress-track {
+  width: 100%;
+  height: 10px;
+  background: var(--border-light);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--primary), var(--primary-muted));
+  border-radius: 99px;
+  transition: width 0.5s ease;
+}
+
+.mileage-stats {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ── Route options ──────────────────────────────────────── */
 
 .route-option {
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-  margin-bottom: 5px;
+  padding: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all var(--transition);
+  background: var(--surface);
 }
+
 .route-option:hover {
-  background-color: #f0f0f0;
+  border-color: var(--primary);
+  background: var(--surface-alt);
+  box-shadow: var(--shadow-sm);
 }
+
 .route-option.selected {
-  background-color: var(--primary-color);
-  color: white;
-  border-color: var(--primary-hover);
+  border-color: var(--primary);
+  background: var(--primary-light);
+  box-shadow: 0 0 0 2px rgba(13,148,136,0.2);
 }
-#plannedRunInfo h4 {
-  margin-top: 0;
+
+.route-option-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
 }
-.message-container {
-    margin-top: 10px;
+
+.route-option-num {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
 }
-.msg {
-    padding: 10px;
-    border-radius: 5px;
-    text-align: center;
-    font-weight: 500;
+
+.route-option-strategy {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--border-light);
+  color: var(--text-muted);
 }
-.msg.loading {
-    background-color: #e2e3e5;
-    color: #383d41;
+
+.route-option-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
-.msg.success {
-    background-color: #d4edda;
-    color: #155724;
+
+.route-stat {
+  font-size: 13px;
+  color: var(--text-muted);
 }
-.msg.error {
-    background-color: #f8d7da;
-    color: #721c24;
+
+.route-stat-value {
+  font-weight: 600;
+  color: var(--text);
 }
+
+#plannedRunInfo {
+  display: none;
+}
+
+#plannedRunInfo .card-header {
+  margin-bottom: 8px;
+}
+
+.route-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.route-actions button {
+  flex: 1;
+}
+
+/* ── Weather widget ─────────────────────────────────────── */
+
+#weather {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 800;
+  display: none;
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text);
+  box-shadow: var(--shadow-md);
+  min-width: 160px;
+}
+
+.weather-temp {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.weather-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.weather-wind {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* ── Empty state ────────────────────────────────────────── */
+
+.empty-state {
+  text-align: center;
+  padding: 20px 12px;
+  color: var(--text-muted);
+}
+
+.empty-state svg {
+  width: 48px;
+  height: 48px;
+  color: var(--border);
+  margin-bottom: 12px;
+}
+
+.empty-state p {
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.empty-state .hint {
+  font-size: 12px;
+  color: var(--text-light);
+  margin-top: 8px;
+}
+
+/* ── About ──────────────────────────────────────────────── */
+
+.about-text {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin: 0 0 12px 0;
+}
+
 .github-link {
   display: inline-flex;
   align-items: center;
-  padding: 8px 12px;
-  background-color: #24292e;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #24292e;
   color: white;
   text-decoration: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
-  transition: background-color 0.2s;
+  font-weight: 500;
+  transition: background var(--transition);
+  min-height: 44px;
 }
+
 .github-link:hover {
-  background-color: #40464d;
+  background: #40464d;
   color: white;
-  text-decoration: none;
 }
-#weather {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 800;
-  background: rgba(255,255,255,0.95);
-  border: 1px solid #ccc;
-  padding: 8px 12px;
-  font: 12px/1.2 sans-serif;
-  border-radius: 6px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+
+.github-link svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ── Spinner (CSS instead of gif) ───────────────────────── */
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Leaflet overrides ──────────────────────────────────── */
+
+.leaflet-control-attribution {
+  font-size: 10px !important;
+}
+
+/* ── Responsive / Mobile ────────────────────────────────── */
+
+@media (max-width: 768px) {
+  :root {
+    --sidebar-width: 100%;
+  }
+
+  #sidebar-toggle {
+    display: flex;
+  }
+
+  #app {
+    flex-direction: column;
+  }
+
+  #sidebar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: auto;
+    width: 100%;
+    height: 70vh;
+    max-height: 70vh;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.15);
+    transform: translateY(100%);
+    padding-top: 12px;
+  }
+
+  #sidebar.open {
+    transform: translateY(0);
+  }
+
+  #sidebar-overlay.visible {
+    display: block;
+  }
+
+  #sidebar::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 99px;
+    margin: 0 auto 12px auto;
+    flex-shrink: 0;
+  }
+
+  #map-container {
+    height: 100%;
+  }
+
+  .input-row {
+    grid-template-columns: 1fr;
+  }
+
+  #weather {
+    top: auto;
+    bottom: 12px;
+    right: 12px;
+    left: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .route-option-stats {
+    flex-direction: column;
+    gap: 4px;
+  }
 }
 </style>
 </head>
 <body>
 
-<div id="sidebar">
-  <div class="card">
-    <h3>Zephyr Route Planner</h3>
-    <label for="zips">Zip codes (e.g., 15243 15228):</label>
-    <input id="zips" type="text" placeholder="Enter zip codes">
-    <button id="load">Load Roads</button>
-    <div id="load-msg-container" class="message-container"></div>
-  </div>
+<div id="app">
+  <button id="sidebar-toggle" aria-label="Toggle sidebar">
+    <svg id="toggle-icon-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+    <svg id="toggle-icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+    </svg>
+  </button>
+  <div id="sidebar-overlay"></div>
 
-  <div class="card">
-    <h4>Route Planning</h4>
-    <button id="start">Plan New Route</button><br>
-    <label><input id="avoid_hills" type="checkbox"> Avoid hills</label>
-    <div id="plan-msg-container" class="message-container"></div>
-  </div>
+  <div id="sidebar">
 
-  <div id="plannedRunInfo" class="card" style="display:none;"></div>
+    <!-- Brand -->
+    <div>
+      <h3 class="brand">Zephyr</h3>
+      <p class="brand-subtitle">Smart route planner for runners</p>
+    </div>
 
-  <div class="card">
-    <h4>Activity Progress</h4>
-    <div class="progress-bar-container">
-      <span id="progress-bar-text">0%</span>
-      <div class="progress-bar-outer">
-        <div id="progress-bar-inner"></div>
+    <!-- Load Roads -->
+    <div class="card">
+      <div class="card-header">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        <h4>Load Roads</h4>
+      </div>
+      <div class="input-group">
+        <label for="zips">Zip codes (space-separated)</label>
+        <input id="zips" type="text" placeholder="e.g. 15243 15228">
+      </div>
+      <button id="load">Load Roads</button>
+      <div id="load-msg-container" class="message-container"></div>
+    </div>
+
+    <!-- Route Planning -->
+    <div class="card">
+      <div class="card-header">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <h4>Route Planning</h4>
+      </div>
+      <button id="start">Plan New Route</button>
+      <label class="checkbox-label" style="margin-top:4px">
+        <input id="avoid_hills" type="checkbox">
+        Avoid hills
+      </label>
+      <div id="plan-msg-container" class="message-container"></div>
+    </div>
+
+    <!-- Route Options (hidden until routes are generated) -->
+    <div id="plannedRunInfo" class="card"></div>
+
+    <!-- Progress -->
+    <div class="card">
+      <div class="card-header">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <h4>Exploration Progress</h4>
+      </div>
+      <div class="progress-section">
+        <div class="progress-label">
+          <span class="mileage-stats" id="mileageStatsDisplay">Load roads to see stats</span>
+          <span class="progress-pct" id="progress-bar-text">0%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progress-bar-inner"></div>
+        </div>
       </div>
     </div>
-    <div id="mileageStatsDisplay" style="text-align: center;"></div>
-  </div>
 
-  <div class="card">
-    <h4>Preferences</h4>
-    <label for="tmin">Min Ideal Temp (°F):</label>
-    <input id="tmin" type="number">
-    <label for="tmax">Max Ideal Temp (°F):</label>
-    <input id="tmax" type="number">
-    <label for="wmax">Max Wind (mph):</label>
-    <input id="wmax" type="number">
-    <label for="target">Target Distance (mi):</label>
-    <input id="target" type="number">
-    <button id="savePref">Save Preferences</button>
-    <div id="prefs-msg-container" class="message-container"></div>
-  </div>
-
-  <div class="card">
-    <h4>About Zephyr</h4>
-    <p style="font-size: 13px; line-height: 1.4; color: #666;">
-      Zephyr is a smart route planner that helps you explore your neighborhood systematically. 
-      It generates routes that prioritize new roads you haven't run yet, helping you discover 
-      more of your area while avoiding repetitive paths.
-    </p>
-    <p style="font-size: 13px; line-height: 1.4; color: #666; margin-top: 10px;">
-      The app considers weather conditions and your preferences to create optimal routes. 
-      As you complete runs, it tracks your progress and suggests routes that cover new territory.
-    </p>
-    <div style="text-align: center; margin-top: 15px;">
-      <a href="https://github.com/conjfrnk/Zephyr" target="_blank" rel="noopener noreferrer" class="github-link">
-        <svg style="width: 16px; height: 16px; margin-right: 5px; vertical-align: middle;" viewBox="0 0 16 16" fill="currentColor">
-          <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21-.15.46-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"></path>
-        </svg>
-        View on GitHub
-      </a>
+    <!-- Preferences -->
+    <div class="card">
+      <div class="card-header">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <h4>Preferences</h4>
+      </div>
+      <div class="input-row">
+        <div class="input-group">
+          <label for="tmin">Min Temp (&deg;F)</label>
+          <input id="tmin" type="number">
+        </div>
+        <div class="input-group">
+          <label for="tmax">Max Temp (&deg;F)</label>
+          <input id="tmax" type="number">
+        </div>
+      </div>
+      <div class="input-row">
+        <div class="input-group">
+          <label for="wmax">Max Wind (mph)</label>
+          <input id="wmax" type="number">
+        </div>
+        <div class="input-group">
+          <label for="target">Target Dist (mi)</label>
+          <input id="target" type="number">
+        </div>
+      </div>
+      <button id="savePref">Save Preferences</button>
+      <div id="prefs-msg-container" class="message-container"></div>
     </div>
+
+    <!-- About -->
+    <div class="card">
+      <div class="card-header">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <h4>About</h4>
+      </div>
+      <p class="about-text">
+        Zephyr helps you explore your neighborhood systematically. It generates routes prioritizing
+        new roads, considers weather and preferences, and tracks your exploration progress.
+      </p>
+      <div style="text-align: center;">
+        <a href="https://github.com/conjfrnk/Zephyr" target="_blank" rel="noopener noreferrer" class="github-link">
+          <svg viewBox="0 0 16 16" fill="currentColor">
+            <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21-.15.46-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/>
+          </svg>
+          View on GitHub
+        </a>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="map-container">
+    <div id="map"></div>
+    <div id="weather"></div>
   </div>
 </div>
-
-<div id="map"></div>
-<div id="weather" style="display:none"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 document.addEventListener("DOMContentLoaded", function() {
 
-  const map = L.map('map').setView([40.44, -79.99], 13);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '© OpenStreetMap contributors'
-  }).addTo(map);
+  /* ── Utility: safe text escaping ────────────────────── */
 
-  const graphLayer = L.geoJSON(null, {
-    style: f => ({
-      color: f.properties.done ? '#28a745' : '#6c757d',
-      weight: f.properties.done ? 4 : 2,
-      opacity: f.properties.done ? 0.8 : 0.6
-    })
-  }).addTo(map);
-
-  const plannedLayer = L.geoJSON(null, {
-    style: { color: '#dc3545', weight: 5, opacity: 0.9 }
-  }).addTo(map);
-
-  // Set up weather refresh on map movement
-  map.on('moveend', refreshWeather);
-
-  const zipsInput = document.getElementById('zips');
-  const tminInput = document.getElementById('tmin'), tmaxInput = document.getElementById('tmax');
-  const wmaxInput = document.getElementById('wmax'), targetInput = document.getElementById('target');
-  const loadBtn = document.getElementById('load');
-  const startBtn = document.getElementById('start');
-  const avoidHillsCheck = document.getElementById('avoid_hills');
-  const savePrefBtn = document.getElementById('savePref');
-  const plannedRunInfoDiv = document.getElementById('plannedRunInfo');
-  const progressBarTextEl = document.getElementById('progress-bar-text');
-  const progressBarInnerEl = document.getElementById('progress-bar-inner');
-  const mileageStatsDiv = document.getElementById('mileageStatsDisplay');
-  const weatherDiv = document.getElementById('weather');
-
-  let currentPrefs = {};
-  let currentRunId = null;
-  let isGraphDataReady = false;
-
-  function showLoading(message, containerId = null) {
-      const container = containerId ? document.getElementById(containerId) : null;
-      if(container) {
-          container.innerHTML = `<div class="msg loading"><img src="/static/spinner.gif" style="width: 20px; height: 20px; vertical-align: middle;"> ${message}</div>`;
-      }
+  function escapeText(str) {
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.textContent;
   }
 
-  function showMessage(message, isError = false, containerId = null) {
-    const container = containerId ? document.getElementById(containerId) : null;
-    if(container) {
-        const msgClass = isError ? 'msg error' : 'msg success';
-        container.innerHTML = `<div class="${msgClass}">${message}</div>`;
-        
-        // Clear message after some time if it's not an error
-        if(!isError) {
-            setTimeout(() => {
-                if(container.innerHTML.includes(message)) {
-                    container.innerHTML = '';
-                }
-            }, 4000);
+  /* ── Map setup ──────────────────────────────────────── */
+
+  var map = L.map('map').setView([40.44, -79.99], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  var graphLayer = L.geoJSON(null, {
+    style: function(f) {
+      return {
+        color: f.properties.done ? '#16a34a' : '#9ca3af',
+        weight: f.properties.done ? 4 : 2,
+        opacity: f.properties.done ? 0.8 : 0.5
+      };
+    }
+  }).addTo(map);
+
+  var plannedLayer = L.geoJSON(null, {
+    style: { color: '#dc2626', weight: 5, opacity: 0.9 }
+  }).addTo(map);
+
+  /* ── DOM refs ───────────────────────────────────────── */
+
+  var zipsInput = document.getElementById('zips');
+  var tminInput = document.getElementById('tmin');
+  var tmaxInput = document.getElementById('tmax');
+  var wmaxInput = document.getElementById('wmax');
+  var targetInput = document.getElementById('target');
+  var loadBtn = document.getElementById('load');
+  var startBtn = document.getElementById('start');
+  var avoidHillsCheck = document.getElementById('avoid_hills');
+  var savePrefBtn = document.getElementById('savePref');
+  var plannedRunInfoDiv = document.getElementById('plannedRunInfo');
+  var progressBarTextEl = document.getElementById('progress-bar-text');
+  var progressBarInnerEl = document.getElementById('progress-bar-inner');
+  var mileageStatsDiv = document.getElementById('mileageStatsDisplay');
+  var weatherDiv = document.getElementById('weather');
+  var sidebarToggle = document.getElementById('sidebar-toggle');
+  var sidebar = document.getElementById('sidebar');
+  var sidebarOverlay = document.getElementById('sidebar-overlay');
+  var toggleIconOpen = document.getElementById('toggle-icon-open');
+  var toggleIconClose = document.getElementById('toggle-icon-close');
+
+  var currentPrefs = {};
+  var currentRunId = null;
+  var isGraphDataReady = false;
+
+  /* ── Mobile sidebar toggle ──────────────────────────── */
+
+  function openSidebar() {
+    sidebar.classList.add('open');
+    sidebarOverlay.style.display = 'block';
+    requestAnimationFrame(function() {
+      sidebarOverlay.classList.add('visible');
+    });
+    toggleIconOpen.style.display = 'none';
+    toggleIconClose.style.display = 'block';
+  }
+
+  function closeSidebar() {
+    sidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('visible');
+    setTimeout(function() {
+      sidebarOverlay.style.display = 'none';
+    }, 300);
+    toggleIconOpen.style.display = 'block';
+    toggleIconClose.style.display = 'none';
+  }
+
+  sidebarToggle.addEventListener('click', function() {
+    if (sidebar.classList.contains('open')) {
+      closeSidebar();
+    } else {
+      openSidebar();
+    }
+  });
+
+  sidebarOverlay.addEventListener('click', closeSidebar);
+
+  /* ── Touch swipe to dismiss sidebar on mobile ───────── */
+
+  (function() {
+    var touchStartY = 0;
+    var touchCurrentY = 0;
+    var isDragging = false;
+
+    sidebar.addEventListener('touchstart', function(e) {
+      if (window.innerWidth > 768) return;
+      touchStartY = e.touches[0].clientY;
+      isDragging = true;
+    }, { passive: true });
+
+    sidebar.addEventListener('touchmove', function(e) {
+      if (!isDragging || window.innerWidth > 768) return;
+      touchCurrentY = e.touches[0].clientY;
+      var diff = touchCurrentY - touchStartY;
+      if (diff > 0 && sidebar.scrollTop <= 0) {
+        sidebar.style.transform = 'translateY(' + diff + 'px)';
+      }
+    }, { passive: true });
+
+    sidebar.addEventListener('touchend', function() {
+      if (!isDragging || window.innerWidth > 768) return;
+      isDragging = false;
+      var diff = touchCurrentY - touchStartY;
+      sidebar.style.transform = '';
+      if (diff > 80) {
+        closeSidebar();
+      }
+    }, { passive: true });
+  })();
+
+  /* ── Messages (safe DOM construction) ───────────────── */
+
+  function showLoading(message, containerId) {
+    if (!containerId) containerId = 'load-msg-container';
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    container.textContent = '';
+    var msgDiv = document.createElement('div');
+    msgDiv.className = 'msg loading';
+    var spinnerEl = document.createElement('span');
+    spinnerEl.className = 'spinner';
+    msgDiv.appendChild(spinnerEl);
+    msgDiv.appendChild(document.createTextNode(' ' + message));
+    container.appendChild(msgDiv);
+  }
+
+  function showMessage(message, isError, containerId) {
+    if (!containerId) containerId = 'load-msg-container';
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    if (!message) { container.textContent = ''; return; }
+    container.textContent = '';
+    var msgDiv = document.createElement('div');
+    msgDiv.className = isError ? 'msg error' : 'msg success';
+    msgDiv.textContent = message;
+    container.appendChild(msgDiv);
+    if (!isError) {
+      var savedMsg = message;
+      setTimeout(function() {
+        var current = container.querySelector('.msg');
+        if (current && current.textContent === savedMsg) {
+          container.textContent = '';
         }
+      }, 4000);
     }
   }
 
+  /* ── Weather (with 2s debounce) ─────────────────────── */
+
+  var weatherDebounceTimer = null;
+
   function refreshWeather() {
     if (!map) return;
-    const center = map.getCenter();
-    fetch(`/weather?lat=${center.lat}&lon=${center.lng}`)
-      .then(r => r.ok ? r.json() : Promise.reject(`Weather fetch failed: ${r.status}`))
-      .then(w => {
-        weatherDiv.style.display = 'block';
-        weatherDiv.textContent = `${w.temp_f}°F • ${w.short} • ${w.wind_mph} mph winds`;
-      })
-      .catch(err => { 
-        console.error("Error refreshing weather:", err); 
-        weatherDiv.style.display = 'none'; 
-      });
+    if (weatherDebounceTimer) clearTimeout(weatherDebounceTimer);
+    weatherDebounceTimer = setTimeout(function() {
+      var center = map.getCenter();
+      fetch('/weather?lat=' + center.lat + '&lon=' + center.lng)
+        .then(function(r) { return r.ok ? r.json() : Promise.reject('Weather fetch failed: ' + r.status); })
+        .then(function(w) {
+          weatherDiv.style.display = 'block';
+          weatherDiv.textContent = '';
+          var tempDiv = document.createElement('div');
+          tempDiv.className = 'weather-temp';
+          tempDiv.textContent = w.temp_f + '\u00B0F';
+          var descDiv = document.createElement('div');
+          descDiv.className = 'weather-desc';
+          descDiv.textContent = w.short;
+          var windDiv = document.createElement('div');
+          windDiv.className = 'weather-wind';
+          windDiv.textContent = w.wind_mph + ' mph wind';
+          weatherDiv.appendChild(tempDiv);
+          weatherDiv.appendChild(descDiv);
+          weatherDiv.appendChild(windDiv);
+        })
+        .catch(function(err) {
+          console.error("Error refreshing weather:", err);
+          weatherDiv.style.display = 'none';
+        });
+    }, 2000);
   }
 
+  map.on('moveend', refreshWeather);
+
+  /* ── Progress ───────────────────────────────────────── */
+
   function updateProgressBar(percentage) {
-    const p = parseInt(percentage) || 0;
+    var p = parseInt(percentage) || 0;
     if (progressBarTextEl) progressBarTextEl.textContent = p + '%';
     if (progressBarInnerEl) progressBarInnerEl.style.width = p + '%';
   }
 
   function updateMileageStats(doneMilesM, totalMilesM) {
-    if (mileageStatsDiv) {
-      if (isGraphDataReady && totalMilesM != null && doneMilesM != null) {
-        const doneMi = (doneMilesM / 1609.34).toFixed(2);
-        const totalMi = (totalMilesM / 1609.34).toFixed(2);
-        mileageStatsDiv.innerHTML = `<strong>${doneMi} mi</strong> of <strong>${totalMi} mi</strong> explored`;
-      } else {
-        mileageStatsDiv.innerHTML = 'Load map to see mileage stats.';
-      }
+    if (!mileageStatsDiv) return;
+    mileageStatsDiv.textContent = '';
+    if (isGraphDataReady && totalMilesM != null && doneMilesM != null) {
+      var doneMi = (doneMilesM / 1609.34).toFixed(1);
+      var totalMi = (totalMilesM / 1609.34).toFixed(1);
+      var doneStrong = document.createElement('strong');
+      doneStrong.textContent = doneMi + ' mi';
+      var totalStrong = document.createElement('strong');
+      totalStrong.textContent = totalMi + ' mi';
+      mileageStatsDiv.appendChild(doneStrong);
+      mileageStatsDiv.appendChild(document.createTextNode(' of '));
+      mileageStatsDiv.appendChild(totalStrong);
+    } else {
+      mileageStatsDiv.textContent = 'Load roads to see stats';
     }
   }
 
+  /* ── Status polling ─────────────────────────────────── */
+
   function pollStatus() {
     fetch('/status')
-      .then(r => r.ok ? r.json() : Promise.reject('Status fetch failed'))
-      .then(statusData => {
+      .then(function(r) { return r.ok ? r.json() : Promise.reject('Status fetch failed'); })
+      .then(function(statusData) {
         isGraphDataReady = statusData.ready;
         updateProgressBar(statusData.done_edge_pct);
         updateMileageStats(statusData.total_done_length_m, statusData.total_graph_length_m);
 
         if (!statusData.ready) {
-          showLoading("Map data is loading...", 'load-msg-container');
+          showLoading("Loading map data...", 'load-msg-container');
           setTimeout(pollStatus, 2000);
         } else {
-          showMessage("Map data loaded. Ready to plan routes.", false, 'load-msg-container');
-          fetchGraphData().then(() => {
+          showMessage("Roads loaded. Ready to plan routes.", false, 'load-msg-container');
+          fetchGraphData().then(function() {
             refreshWeather();
           });
         }
       })
-      .catch(err => {
-        showMessage("Error updating status. Will retry.", true, 'load-msg-container');
+      .catch(function(err) {
+        showMessage("Error updating status. Retrying...", true, 'load-msg-container');
         setTimeout(pollStatus, 5000);
       });
   }
 
+  /* ── Graph data ─────────────────────────────────────── */
+
   function fetchGraphData() {
     return fetch('/graph')
-      .then(r => r.ok ? r.json() : Promise.reject('Graph fetch error'))
-      .then(graphGeoJSON => {
+      .then(function(r) { return r.ok ? r.json() : Promise.reject('Graph fetch error'); })
+      .then(function(graphGeoJSON) {
         graphLayer.clearLayers().addData(graphGeoJSON);
         if (graphLayer.getLayers().length > 0) {
-          map.fitBounds(graphLayer.getBounds(), {padding: [20,20]});
+          map.fitBounds(graphLayer.getBounds(), { padding: [20, 20] });
         }
       })
-      .catch(err => {
+      .catch(function(err) {
         console.error("Failed to load map data:", err);
       });
   }
 
-  loadBtn.onclick = () => {
-    const zipsToLoad = zipsInput.value.trim();
+  /* ── Load roads ─────────────────────────────────────── */
+
+  loadBtn.onclick = function() {
+    var zipsToLoad = zipsInput.value.trim();
     if (!zipsToLoad) {
       showMessage('Please enter zip codes.', true, 'load-msg-container');
       return;
     }
-    showLoading(`Loading roads for: ${zipsToLoad}...`, 'load-msg-container');
+    showLoading('Loading roads for ' + zipsToLoad + '...', 'load-msg-container');
     fetch('/set_zipcodes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ zips: zipsToLoad })
     })
-    .then(r => r.ok ? r.json() : Promise.reject('Set zips failed'))
-    .then(response => {
-        if(response.started){
-          pollStatus();
-        } else {
-          showMessage(response.error || "Failed to start loading zip codes.", true, 'load-msg-container');
-        }
+    .then(function(r) { return r.ok ? r.json() : Promise.reject('Set zips failed'); })
+    .then(function(response) {
+      if (response.started) {
+        pollStatus();
+      } else {
+        showMessage(response.error || "Failed to start loading.", true, 'load-msg-container');
+      }
     })
-    .catch(err => {
-      showMessage(`Error: ${err.message || err}`, true, 'load-msg-container');
+    .catch(function(err) {
+      showMessage('Error: ' + (err.message || err), true, 'load-msg-container');
     });
   };
 
-  startBtn.onclick = () => {
+  /* ── Plan route ─────────────────────────────────────── */
+
+  startBtn.onclick = function() {
     if (!isGraphDataReady) {
-      showMessage("Map data is not ready.", true, 'plan-msg-container');
+      showMessage("Load roads first before planning a route.", true, 'plan-msg-container');
       return;
     }
     showMessage("Click on the map to choose a starting point.", false, 'plan-msg-container');
-    map.once('click', (e) => {
+    map.once('click', function(e) {
       planRoute(e.latlng.lat, e.latlng.lng);
     });
   };
 
   function planRoute(lat, lon) {
     showLoading('Planning route...', 'plan-msg-container');
-    const avoidHills = avoidHillsCheck.checked;
-    fetch(`/plan_auto?lat=${lat}&lon=${lon}&avoid_hills=${avoidHills}`)
-      .then(r => r.ok ? r.json() : Promise.reject('Route planning failed'))
-      .then(response => {
+    var avoidHills = avoidHillsCheck.checked;
+    fetch('/plan_auto?lat=' + lat + '&lon=' + lon + '&avoid_hills=' + avoidHills)
+      .then(function(r) { return r.ok ? r.json() : Promise.reject('Route planning failed'); })
+      .then(function(response) {
         if (!response || !response.paths || response.paths.length === 0) {
-          showMessage('Could not find any suitable routes.', true, 'plan-msg-container');
+          showMessage('No suitable routes found.', true, 'plan-msg-container');
           return;
         }
+        showMessage('', false, 'plan-msg-container');
         displayRouteOptions(response.paths);
       })
-      .catch(err => {
+      .catch(function(err) {
         showMessage('Error planning route.', true, 'plan-msg-container');
       });
   }
 
+  /* ── Strategy labels ────────────────────────────────── */
+
+  var strategyLabels = {
+    'two_leg': 'Loop',
+    'multi_point': 'Multi-point',
+    'out_and_back': 'Out & Back',
+    'zigzag': 'Zigzag'
+  };
+
+  /* ── Display route options (using data-route-index) ─── */
+
   function displayRouteOptions(paths) {
-    plannedRunInfoDiv.innerHTML = '<h4>Select a Route</h4>';
+    plannedRunInfoDiv.textContent = '';
     plannedRunInfoDiv.style.display = 'block';
 
-    paths.forEach((path, index) => {
-      const props = path.properties;
-      const distMi = (props.distance_m / 1609.34).toFixed(2);
-      const percNew = (props.percentage_new_distance || 0).toFixed(1);
+    /* Header */
+    var header = document.createElement('div');
+    header.className = 'card-header';
+    var headerIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    headerIcon.setAttribute('viewBox', '0 0 24 24');
+    headerIcon.setAttribute('fill', 'none');
+    headerIcon.setAttribute('stroke', 'currentColor');
+    headerIcon.setAttribute('stroke-width', '2');
+    headerIcon.setAttribute('stroke-linecap', 'round');
+    headerIcon.setAttribute('stroke-linejoin', 'round');
+    var path1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path1.setAttribute('d', 'M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9');
+    var path2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path2.setAttribute('d', 'M13.73 21a2 2 0 0 1-3.46 0');
+    headerIcon.appendChild(path1);
+    headerIcon.appendChild(path2);
+    var headerTitle = document.createElement('h4');
+    headerTitle.textContent = 'Select a Route';
+    header.appendChild(headerIcon);
+    header.appendChild(headerTitle);
+    plannedRunInfoDiv.appendChild(header);
 
-      const optionDiv = document.createElement('div');
+    /* Options list */
+    var optionsContainer = document.createElement('div');
+    optionsContainer.id = 'route-options-list';
+    plannedRunInfoDiv.appendChild(optionsContainer);
+
+    paths.forEach(function(path, index) {
+      var props = path.properties;
+      var distMi = (props.distance_m / 1609.34).toFixed(2);
+      var percNew = (props.percentage_new_distance || 0).toFixed(1);
+      var ascentFt = props.total_ascent_m ? (props.total_ascent_m * 3.28084).toFixed(0) : '0';
+      var descentFt = props.total_descent_m ? (props.total_descent_m * 3.28084).toFixed(0) : '0';
+      var strategy = props.strategy || '';
+      var strategyLabel = strategyLabels[strategy] || '';
+
+      var optionDiv = document.createElement('div');
       optionDiv.className = 'route-option';
-      optionDiv.innerHTML = `
-        <strong>Option ${index + 1}:</strong> ${distMi} mi, ${percNew}% new
-      `;
-      optionDiv.onclick = () => {
-        document.querySelectorAll('.route-option').forEach(el => el.classList.remove('selected'));
+      optionDiv.setAttribute('data-route-index', String(index));
+
+      /* Option header row */
+      var optHeader = document.createElement('div');
+      optHeader.className = 'route-option-header';
+      var numSpan = document.createElement('span');
+      numSpan.className = 'route-option-num';
+      numSpan.textContent = 'Route ' + (index + 1);
+      optHeader.appendChild(numSpan);
+      if (strategyLabel) {
+        var stratSpan = document.createElement('span');
+        stratSpan.className = 'route-option-strategy';
+        stratSpan.textContent = strategyLabel;
+        optHeader.appendChild(stratSpan);
+      }
+      optionDiv.appendChild(optHeader);
+
+      /* Stats row */
+      var statsDiv = document.createElement('div');
+      statsDiv.className = 'route-option-stats';
+
+      function addStat(valueText, unitText) {
+        var stat = document.createElement('span');
+        stat.className = 'route-stat';
+        var val = document.createElement('span');
+        val.className = 'route-stat-value';
+        val.textContent = valueText;
+        stat.appendChild(val);
+        stat.appendChild(document.createTextNode(' ' + unitText));
+        statsDiv.appendChild(stat);
+      }
+
+      addStat(distMi, 'mi');
+      addStat(percNew + '%', 'new');
+      addStat('\u2191 ' + ascentFt, 'ft');
+      addStat('\u2193 ' + descentFt, 'ft');
+
+      optionDiv.appendChild(statsDiv);
+
+      optionDiv.onclick = function() {
+        document.querySelectorAll('.route-option').forEach(function(el) {
+          el.classList.remove('selected');
+        });
         optionDiv.classList.add('selected');
         plannedLayer.clearLayers().addData(path);
-        if (path.geometry) map.fitBounds(plannedLayer.getBounds(), {padding:[40,40]});
+        if (path.geometry) {
+          map.fitBounds(plannedLayer.getBounds(), { padding: [40, 40] });
+        }
       };
-      plannedRunInfoDiv.appendChild(optionDiv);
+
+      optionsContainer.appendChild(optionDiv);
     });
 
-    const acceptButton = document.createElement('button');
+    /* Action buttons */
+    var actionsDiv = document.createElement('div');
+    actionsDiv.className = 'route-actions';
+
+    var acceptButton = document.createElement('button');
     acceptButton.textContent = 'Accept Route';
-    acceptButton.onclick = () => {
-      const selectedOption = document.querySelector('.route-option.selected');
-      if (selectedOption) {
-        const selectedIndex = Array.from(plannedRunInfoDiv.children).indexOf(selectedOption) -1;
-        finalizePlannedRoute(paths[selectedIndex]);
+    acceptButton.onclick = function() {
+      var selectedOption = document.querySelector('.route-option.selected');
+      if (!selectedOption) {
+        showMessage('Select a route first.', true, 'plan-msg-container');
+        return;
       }
+      var selectedIndex = parseInt(selectedOption.getAttribute('data-route-index'), 10);
+      finalizePlannedRoute(paths[selectedIndex]);
     };
-    plannedRunInfoDiv.appendChild(acceptButton);
+    actionsDiv.appendChild(acceptButton);
 
-    const completeButton = document.createElement('button');
+    var completeButton = document.createElement('button');
     completeButton.id = 'completeBtn';
-    completeButton.textContent = 'Mark Run as Completed';
+    completeButton.className = 'btn-accent';
+    completeButton.textContent = 'Mark Completed';
     completeButton.disabled = true;
-    plannedRunInfoDiv.appendChild(completeButton);
+    actionsDiv.appendChild(completeButton);
 
+    plannedRunInfoDiv.appendChild(actionsDiv);
   }
 
+  /* ── Finalize / save route ──────────────────────────── */
+
   function finalizePlannedRoute(finalGeoJSON) {
-    showLoading('Saving planned route...', 'plan-msg-container');
+    showLoading('Saving route...', 'plan-msg-container');
     fetch('/runs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-          distance_m: finalGeoJSON.properties.distance_m,
-          geojson: finalGeoJSON
+        distance_m: finalGeoJSON.properties.distance_m,
+        geojson: finalGeoJSON
       })
     })
-    .then(r => r.ok ? r.json() : Promise.reject('Saving run failed'))
-    .then(res => {
+    .then(function(r) { return r.ok ? r.json() : Promise.reject('Saving run failed'); })
+    .then(function(res) {
       if (res && res.run_id) {
         currentRunId = res.run_id;
         showMessage('Route saved. Ready to run!', false, 'plan-msg-container');
-        const completeBtn = document.getElementById('completeBtn');
-        if(completeBtn) completeBtn.disabled = false;
-
-        completeBtn.onclick = () => {
-          completeRun(currentRunId);
-        };
-
+        var completeBtn = document.getElementById('completeBtn');
+        if (completeBtn) {
+          completeBtn.disabled = false;
+          completeBtn.onclick = function() {
+            completeRun(currentRunId);
+          };
+        }
       } else {
-        showMessage('Failed to save planned route.', true, 'plan-msg-container');
+        showMessage('Failed to save route.', true, 'plan-msg-container');
       }
     })
-    .catch(err => {
-      showMessage('Error saving planned run.', true, 'plan-msg-container');
+    .catch(function(err) {
+      showMessage('Error saving route.', true, 'plan-msg-container');
     });
   }
 
+  /* ── Complete run ───────────────────────────────────── */
+
   function completeRun(runId) {
-    showLoading(`Completing run ${runId}...`, 'plan-msg-container');
+    showLoading('Completing run...', 'plan-msg-container');
     fetch('/runs', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ run_id: runId })
     })
-    .then(r => r.ok ? r.json() : Promise.reject('Completing run failed'))
-    .then(res => {
+    .then(function(r) { return r.ok ? r.json() : Promise.reject('Completing run failed'); })
+    .then(function(res) {
       if (res.ok) {
-        showMessage(`Run ${runId} marked as completed!`, false, 'plan-msg-container');
+        showMessage('Run completed!', false, 'plan-msg-container');
         plannedLayer.clearLayers();
         plannedRunInfoDiv.style.display = 'none';
-        pollStatus(); // Refresh status and map
+        pollStatus();
       } else {
-        showMessage(`Problem completing run: ${res.warning || 'Unknown error'}.`, true, 'plan-msg-container');
+        showMessage('Problem completing run: ' + (res.warning || 'Unknown error'), true, 'plan-msg-container');
       }
     })
-    .catch(err => {
+    .catch(function(err) {
       showMessage('Error completing run.', true, 'plan-msg-container');
     });
   }
 
-  savePrefBtn.onclick = () => {
-    const prefsToSave = {
+  /* ── Preferences ────────────────────────────────────── */
+
+  savePrefBtn.onclick = function() {
+    var prefsToSave = {
       tmin: parseFloat(tminInput.value),
       tmax: parseFloat(tmaxInput.value),
       wmax: parseFloat(wmaxInput.value),
@@ -611,18 +1335,62 @@ document.addEventListener("DOMContentLoaded", function() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(prefsToSave)
     })
-    .then(r => r.ok ? r.json() : Promise.reject('Save prefs failed'))
-    .then(() => { showMessage('Preferences saved!', false, 'prefs-msg-container'); currentPrefs = prefsToSave; })
-    .catch(err => { showMessage('Error saving preferences.', true, 'prefs-msg-container'); });
+    .then(function(r) { return r.ok ? r.json() : Promise.reject('Save prefs failed'); })
+    .then(function() {
+      showMessage('Preferences saved!', false, 'prefs-msg-container');
+      currentPrefs = prefsToSave;
+    })
+    .catch(function(err) {
+      showMessage('Error saving preferences.', true, 'prefs-msg-container');
+    });
   };
 
+  /* ── Initialize ─────────────────────────────────────── */
+
+  function buildEmptyState(container) {
+    container.textContent = '';
+    var wrapper = document.createElement('div');
+    wrapper.className = 'empty-state';
+    var svgNS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.5');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    var p1 = document.createElementNS(svgNS, 'path');
+    p1.setAttribute('d', 'M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z');
+    var c1 = document.createElementNS(svgNS, 'circle');
+    c1.setAttribute('cx', '12');
+    c1.setAttribute('cy', '10');
+    c1.setAttribute('r', '3');
+    svg.appendChild(p1);
+    svg.appendChild(c1);
+    wrapper.appendChild(svg);
+
+    var mainText = document.createElement('p');
+    mainText.textContent = 'Enter zip codes above and click Load Roads to get started.';
+    wrapper.appendChild(mainText);
+
+    var hint = document.createElement('p');
+    hint.className = 'hint';
+    hint.textContent = 'Roads will appear on the map once loaded.';
+    wrapper.appendChild(hint);
+
+    container.appendChild(wrapper);
+  }
+
   function initializeApp() {
-    showLoading("Initializing...");
+    showLoading("Initializing...", 'load-msg-container');
     Promise.all([
-      fetch('/prefs').then(r => r.json()),
-      fetch('/status').then(r => r.json())
+      fetch('/prefs').then(function(r) { return r.json(); }),
+      fetch('/status').then(function(r) { return r.json(); })
     ])
-    .then(([prefsData, statusData]) => {
+    .then(function(results) {
+      var prefsData = results[0];
+      var statusData = results[1];
+
       currentPrefs = prefsData;
       zipsInput.value = prefsData.zip_codes || '';
       tminInput.value = prefsData.tmin;
@@ -633,20 +1401,21 @@ document.addEventListener("DOMContentLoaded", function() {
       if (statusData.ready) {
         isGraphDataReady = true;
         updateProgressBar(statusData.done_edge_pct);
-                  updateMileageStats(statusData.total_done_length_m, statusData.total_graph_length_m);
-          fetchGraphData().then(() => {
-            console.log("Ready to plan routes.");
-            refreshWeather();
-          });
-        } else if (prefsData.zip_codes && prefsData.zip_codes.trim() !== '') {
-          pollStatus();
-        } else {
-          console.log("Welcome! Enter Zip Codes and click Load Roads.");
-        }
-      })
-      .catch(error => {
-        console.error("Error initializing app:", error);
-      });
+        updateMileageStats(statusData.total_done_length_m, statusData.total_graph_length_m);
+        fetchGraphData().then(function() {
+          showMessage("Roads loaded. Ready to plan routes.", false, 'load-msg-container');
+          refreshWeather();
+        });
+      } else if (prefsData.zip_codes && prefsData.zip_codes.trim() !== '') {
+        pollStatus();
+      } else {
+        buildEmptyState(document.getElementById('load-msg-container'));
+      }
+    })
+    .catch(function(error) {
+      console.error("Error initializing app:", error);
+      showMessage("Failed to connect to server.", true, 'load-msg-container');
+    });
   }
 
   initializeApp();
