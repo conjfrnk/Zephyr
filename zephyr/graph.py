@@ -247,15 +247,14 @@ def fetch_graph_async(zips_list, app):
                 ZIP_STATUS[z_code]["road"] = 100
             publish_graph(temp_G_graph, valid_zips_for_graph)
 
-            if G and G.number_of_nodes() > 0:
+            if temp_G_graph and temp_G_graph.number_of_nodes() > 0:
                 threading.Thread(
                     target=enrich_elevations,
-                    args=(G, fname, valid_zips_for_graph),
+                    args=(temp_G_graph, fname, valid_zips_for_graph),
                     daemon=True,
                 ).start()
             else:
-                if G is not None:
-                    ox.save_graphml(G, fname)
-                publish_graph(temp_G_graph, valid_zips_for_graph)
+                if temp_G_graph is not None:
+                    ox.save_graphml(temp_G_graph, fname)
 
     threading.Thread(target=worker, daemon=True).start()

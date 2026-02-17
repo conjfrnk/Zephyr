@@ -112,7 +112,10 @@ def status():
 def set_zips():
     from flask import current_app
 
-    z_raw = request.json.get("zips", "")
+    d = request.get_json(silent=True)
+    if d is None:
+        return jsonify({"error": "Invalid JSON or Content-Type"}), 400
+    z_raw = d.get("zips", "")
     z = [
         s.strip() for s in z_raw.replace(",", " ").split()
         if s.strip().isdigit() and len(s.strip()) == 5
