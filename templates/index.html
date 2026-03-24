@@ -1466,13 +1466,23 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(function(r) { return r.ok ? r.json() : Promise.reject('Status fetch failed'); })
       .then(function(statusData) {
         if (statusData.ready) {
-          isGraphDataReady = true;
-          updateProgressBar(statusData.done_edge_pct);
-          updateMileageStats(statusData.total_done_length_m, statusData.total_graph_length_m);
-          fetchGraphData().then(function() {
-            showMessage("Roads loaded. Ready to plan routes.", false, 'load-msg-container');
+          // Check if the server's loaded zips match what this browser expects
+          var serverZips = Object.keys(statusData.zips || {}).sort().join(',');
+          var myZips = prefsData.zip_codes.replace(/\s+/g, ',').split(',')
+            .filter(function(s) { return s.length === 5; }).sort().join(',');
+          if (serverZips && serverZips === myZips) {
+            isGraphDataReady = true;
+            updateProgressBar(statusData.done_edge_pct);
+            updateMileageStats(statusData.total_done_length_m, statusData.total_graph_length_m);
+            fetchGraphData().then(function() {
+              showMessage("Roads loaded. Ready to plan routes.", false, 'load-msg-container');
+              refreshWeather();
+            });
+          } else {
+            // Server has a different area loaded; show empty state for this browser
+            buildEmptyState(document.getElementById('load-msg-container'));
             refreshWeather();
-          });
+          }
         } else {
           pollStatus();
         }

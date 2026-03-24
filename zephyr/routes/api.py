@@ -45,7 +45,6 @@ def prefs():
         "tmax": p_obj.ideal_max_temp_f,
         "wmax": p_obj.max_wind_mph,
         "target": p_obj.target_miles,
-        "zip_codes": p_obj.zip_codes,
     })
 
 
@@ -123,7 +122,6 @@ def set_zips():
     if not z:
         return jsonify({"error": "No valid zip codes provided or invalid format."}), 400
     unique_zips = sorted(list(set(z)))
-    update_pref(zip_codes=",".join(unique_zips))
     graph_mod.fetch_graph_async(unique_zips, current_app._get_current_object())
     return jsonify({"started": True, "zips_being_loaded": unique_zips})
 
