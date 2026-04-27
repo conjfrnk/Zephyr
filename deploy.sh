@@ -9,10 +9,10 @@ STACK_NAME="zephyr-app"
 # Login to ECR
 aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ECR_REPO
 
-# Build and push
-docker build -t zephyr .
-docker tag zephyr:latest ${ECR_REPO}:latest
-docker push ${ECR_REPO}:latest
+# Build and push (Fargate default is linux/amd64; pin platform so Apple Silicon
+# hosts produce a deployable image)
+docker buildx build --platform linux/amd64 --provenance=false \
+  -t zephyr -t ${ECR_REPO}:latest --push .
 
 # Deploy/update CloudFormation stack
 aws cloudformation deploy \
