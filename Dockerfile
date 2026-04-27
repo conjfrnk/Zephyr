@@ -22,6 +22,10 @@ COPY . .
 
 RUN mkdir -p /app/data
 
+RUN useradd --system --uid 1000 --shell /bin/false zephyr \
+    && mkdir -p /app/data \
+    && chown -R zephyr:zephyr /app
+
 ENV FLASK_ENV=production
 ENV PYTHONUNBUFFERED=1
 
@@ -29,5 +33,7 @@ EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
+
+USER zephyr
 
 CMD ["gunicorn", "zephyr:create_app()", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "4", "--timeout", "120"]

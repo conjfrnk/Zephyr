@@ -17,13 +17,14 @@ from . import graph as graph_mod
 
 
 def weight_factory(avoid_hills, prioritize_new_roads=True,
-                   temp_avoid_node_pairs=None, route_variety_factor=1.0):
-    globally_done_set = {(e.u, e.v, e.key) for e in DoneEdge.query.all()}
+                   temp_avoid_node_pairs=None, route_variety_factor=1.0,
+                   globally_done_set=None):
+    if globally_done_set is None:
+        globally_done_set = {(e.u, e.v, e.key) for e in DoneEdge.query.all()}
     current_path_avoid_node_pairs = temp_avoid_node_pairs or set()
 
-    def cost_func(u, v, edge_data):
-        k = edge_data.get('_edge_key_')
-        weight = float(edge_data.get("length", 1.0))
+    def _single_edge_cost(u, v, k, single_data):
+        weight = float(single_data.get("length", 1.0))
 
         if tuple(sorted((u, v))) in current_path_avoid_node_pairs:
             weight *= 1000
@@ -35,12 +36,24 @@ def weight_factory(avoid_hills, prioritize_new_roads=True,
                 weight *= 0.8
 
         if avoid_hills:
-            grade = abs(float(edge_data.get("grade_abs", edge_data.get("grade", 0.0))))
+            grade = abs(float(single_data.get("grade_abs", single_data.get("grade", 0.0))))
             grade_penalty = 1 + (grade * 5)
             weight *= grade_penalty
 
         weight *= route_variety_factor
         return max(weight, 0.0001)
+
+    def cost_func(u, v, edge_data):
+        # MultiDiGraph passes a dict-of-keys {0: {...}, 1: {...}}; plain graphs
+        # pass a single edge data dict. Detect by checking if all values are dicts.
+        if edge_data and all(isinstance(val, dict) for val in edge_data.values()):
+            costs = [
+                _single_edge_cost(u, v, k, single_data)
+                for k, single_data in edge_data.items()
+            ]
+            return min(costs) if costs else 0.0001
+        k = edge_data.get('_edge_key_') if edge_data else None
+        return _single_edge_cost(u, v, k, edge_data or {})
 
     return cost_func
 
@@ -96,6 +109,16 @@ def _calculate_path_details(path_nodes, graph_ref, globally_done_set):
 
     if not valid_path:
         return {"distance_m": float('inf'), "valid": False}
+
+    if total_distance_m <= 0:
+        return {
+            "distance_m": 0,
+            "total_ascent_m": 0,
+            "total_descent_m": 0,
+            "percentage_new_distance": 0,
+            "newly_done_edges_set": set(),
+            "valid": False,
+        }
 
     percentage_new_distance = round(
         (new_distance_m / total_distance_m) * 100, 1
@@ -201,8 +224,21 @@ def auto_path(lat, lon, target_miles, avoid_hills,
         n for n, d in graph_ref.nodes(data=True)
         if dist_m(start_node_y, start_node_x, d['y'], d['x']) < radius_m
     ]
-    if start_node not in subgraph_nodes:
+    subgraph_node_set = set(subgraph_nodes)
+    if start_node not in subgraph_node_set:
         subgraph_nodes.append(start_node)
+        subgraph_node_set.add(start_node)
+
+    # Ensure start_node isn't isolated: include all 1-hop neighbors from the
+    # full graph (both directions for MultiDiGraph).
+    start_neighbors = (
+        set(graph_ref.successors(start_node))
+        | set(graph_ref.predecessors(start_node))
+    )
+    for nbr in start_neighbors:
+        if nbr not in subgraph_node_set:
+            subgraph_nodes.append(nbr)
+            subgraph_node_set.add(nbr)
 
     if len(subgraph_nodes) < 30:
         H = graph_ref
@@ -298,7 +334,8 @@ def _generate_two_leg_loops(graph, start_node, target_m, avoid_hills,
         for intermediate_node in intermediate_nodes:
             try:
                 leg1_weight_func = weight_factory(
-                    avoid_hills=avoid_hills, prioritize_new_roads=True
+                    avoid_hills=avoid_hills, prioritize_new_roads=True,
+                    globally_done_set=globally_done_set,
                 )
                 path1_nodes = nx.shortest_path(
                     graph, source=start_node, target=intermediate_node,
@@ -313,7 +350,8 @@ def _generate_two_leg_loops(graph, start_node, target_m, avoid_hills,
                 }
                 leg2_weight_func = weight_factory(
                     avoid_hills=avoid_hills, prioritize_new_roads=True,
-                    temp_avoid_node_pairs=path1_segments
+                    temp_avoid_node_pairs=path1_segments,
+                    globally_done_set=globally_done_set,
                 )
                 path2_nodes = nx.shortest_path(
                     graph, source=intermediate_node, target=start_node,
@@ -367,7 +405,10 @@ def _generate_multi_point_routes(graph, start_node, target_m, avoid_hills,
 
     for waypoint in waypoint_candidates:
         try:
-            leg1_weight = weight_factory(avoid_hills=avoid_hills, prioritize_new_roads=True)
+            leg1_weight = weight_factory(
+                avoid_hills=avoid_hills, prioritize_new_roads=True,
+                globally_done_set=globally_done_set,
+            )
             path1 = nx.shortest_path(graph, source=start_node, target=waypoint, weight=leg1_weight)
             if len(path1) < 2:
                 continue
@@ -382,7 +423,8 @@ def _generate_multi_point_routes(graph, start_node, target_m, avoid_hills,
                 try:
                     leg2_weight = weight_factory(
                         avoid_hills=avoid_hills, prioritize_new_roads=True,
-                        temp_avoid_node_pairs=path1_segments
+                        temp_avoid_node_pairs=path1_segments,
+                        globally_done_set=globally_done_set,
                     )
                     path2 = nx.shortest_path(
                         graph, source=waypoint, target=return_point, weight=leg2_weight
@@ -396,7 +438,8 @@ def _generate_multi_point_routes(graph, start_node, target_m, avoid_hills,
                     }
                     leg3_weight = weight_factory(
                         avoid_hills=avoid_hills, prioritize_new_roads=True,
-                        temp_avoid_node_pairs=all_segments
+                        temp_avoid_node_pairs=all_segments,
+                        globally_done_set=globally_done_set,
                     )
                     path3 = nx.shortest_path(
                         graph, source=return_point, target=start_node, weight=leg3_weight
@@ -450,7 +493,10 @@ def _generate_out_and_back_routes(graph, start_node, target_m, avoid_hills,
 
     for turnaround in turnaround_candidates:
         try:
-            out_weight = weight_factory(avoid_hills=avoid_hills, prioritize_new_roads=True)
+            out_weight = weight_factory(
+                avoid_hills=avoid_hills, prioritize_new_roads=True,
+                globally_done_set=globally_done_set,
+            )
             out_path = nx.shortest_path(
                 graph, source=start_node, target=turnaround, weight=out_weight
             )
@@ -463,7 +509,8 @@ def _generate_out_and_back_routes(graph, start_node, target_m, avoid_hills,
             }
             back_weight = weight_factory(
                 avoid_hills=avoid_hills, prioritize_new_roads=True,
-                temp_avoid_node_pairs=out_segments
+                temp_avoid_node_pairs=out_segments,
+                globally_done_set=globally_done_set,
             )
             back_path = nx.shortest_path(
                 graph, source=turnaround, target=start_node, weight=back_weight
@@ -508,6 +555,8 @@ def _generate_zigzag_routes(graph, start_node, target_m, avoid_hills,
 
     orientation_groups = {}
     for u, v, data in graph.edges(data=True):
+        if u == v:
+            continue
         if u in graph.nodes and v in graph.nodes:
             u_data = graph.nodes[u]
             v_data = graph.nodes[v]
@@ -561,7 +610,10 @@ def _create_zigzag_from_parallel_streets(graph, start_node, parallel_edges,
     closest_edge = min(parallel_edges, key=lambda x: x[3])
     u, v, data, dist_val = closest_edge
 
-    weight_func = weight_factory(avoid_hills=avoid_hills, prioritize_new_roads=True)
+    weight_func = weight_factory(
+        avoid_hills=avoid_hills, prioritize_new_roads=True,
+        globally_done_set=globally_done_set,
+    )
     try:
         path_to_parallel = nx.shortest_path(graph, source=start_node, target=u, weight=weight_func)
     except (nx.NetworkXNoPath, nx.NodeNotFound):

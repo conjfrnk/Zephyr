@@ -389,7 +389,7 @@ Resources:
   ScalableTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
     Properties:
-      MaxCapacity: 3
+      MaxCapacity: 1  # SQLite on EFS does not support multi-writer; do not increase
       MinCapacity: 1
       ResourceId: !Sub service/${ECSCluster}/${ECSService.Name}
       ScalableDimension: ecs:service:DesiredCount
