@@ -12,7 +12,7 @@ aws ecr get-login-password --region $REGION | docker login --username AWS --pass
 # Build and push (Fargate default is linux/amd64; pin platform so Apple Silicon
 # hosts produce a deployable image)
 docker buildx build --platform linux/amd64 --provenance=false \
-  -t zephyr -t ${ECR_REPO}:latest --push .
+  -t ${ECR_REPO}:latest --push .
 
 # Deploy/update CloudFormation stack
 aws cloudformation deploy \
